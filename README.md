@@ -32,9 +32,9 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
   - Source: [Bangladesh Bureau of Statistics](http://www.bbs.gov.bd)
   - Description: Population density maps of Dhaka.
 
-- **Flood Risk Data**:
-  - Source: [INFORM Sub-national Risk Index for Bangladesh 2022](https://data.humdata.org/dataset/inform-subnational-risk-index-bangladesh-2022)
-  - Description: Flood risk data at the Upazila level in Bangladesh.
+- **INFORM Risk Index  Data**:
+  - Source: [INFORM Sub-national Risk Index for Bangladesh 2022](https://drmkc.jrc.ec.europa.eu/inform-index/INFORM-Subnational-Risk/Bangladesh)
+  - Description: Risk data (flood, earthquake, storms...) at the Upazila level in Bangladesh.
 
 - **API Data Sources**:
   - [Open-Meteo API: Temperature, humidity, and rainfall data](https://open-meteo.com/en/docs#latitude=23.7104&longitude=90.4074)
