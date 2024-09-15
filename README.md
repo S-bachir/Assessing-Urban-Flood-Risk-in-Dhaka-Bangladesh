@@ -80,7 +80,7 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
 ## Usage
 1. Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh.git
+    git clone https://github.com/S-bachir/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh.git
     ```
 2. Open the R scripts or notebooks in RStudio.
 3. Run the Python scripts or notebooks in a Python environment.
@@ -100,6 +100,4 @@ The project includes the following key visualizations:
 
 - [Bachir S](https://github.com/S-bachir)
 
-## License
 
-This project is licensed under the [MIT License](LICENSE).
