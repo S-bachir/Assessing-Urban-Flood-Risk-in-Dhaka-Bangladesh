@@ -1,0 +1,192 @@
+
+
+```{r}
+# library(sf)
+# library(ggplot2)
+# library(future.apply)
+# library(dplyr)
+# library(ggthemes)
+
+# # Directory where the shapefiles are located
+# directory <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/"
+
+# # Get the list of shapefiles in the directory
+# shapefiles <- list.files(directory, pattern = "\\.shp$", full.names = TRUE)
+
+# for (shapefile in shapefiles) {
+#     shapefile_data <- st_read(shapefile)
+    
+#     # Simplify geometry (use tolerance value appropriate for your data)
+#     shapefile_data_simplified <- st_simplify(shapefile_data, dTolerance = 0.01)
+    
+#     # Plot simplified shapefile
+#     ggplot() +
+#       geom_sf(data = shapefile_data_simplified) +
+#       ggtitle(paste("Simplified Shapefile:", basename(shapefile))) +
+#       print()  # Print each plot
+# }
+
+
+
+```
+
+
+
+```{r}
+
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(ggthemes)
+library(readxl)
+library(ggspatial)
+library(ggtext)
+library(gganimate)
+
+#######Load csv & xlsx
+file_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/INFORM_Sub-national Risk Index for Bangladesh_ 2022_Admin Level 3_V1.xlsx"
+
+### Read the "INFORM Upazila" sheet
+inform_upazila <- read_excel(file_path, sheet = "INFORM Upazila")
+inform_upazila <- inform_upazila[-c(1:3), ]
+### Read the "Hazard & Exposure" sheet
+hazard_exposure <- read_excel(file_path, sheet = "Hazard & Exposure")
+hazard_exposure <- hazard_exposure[-c(1:3), ]
+# Filter hazard_exposure for Dhaka division
+hazard_exposure_dhaka <- hazard_exposure[hazard_exposure$`ADMIN LEVEL-1\r\n(Division)` == "Dhaka", ]
+# Rename columns for easier handling
+names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "ADMIN LEVEL -3 \r\n(Upazila)"] <- "ADM3_EN"
+names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "Flood Risk ( Riverine and Flash Flood)"] <- "flood_risk"
+
+
+
+
+
+
+###### Load shapefile
+transport_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_transport_a_free_1.shp"  # Example path
+shapefile_path_boundari <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm4_bbs_20201113.shp"  # Example path
+#### Read the shapefile
+transport <- st_read(transport_shapefile_path)
+shapefile_boundari <- st_read(shapefile_path_boundari)
+
+
+shapefile_Dhaka_boundari <- shapefile_boundari[shapefile_boundari$ADM1_EN == "Dhaka", ]
+# Ensure all shapefiles are in the same CRS
+transport <- st_transform(transport, st_crs(shapefile_Dhaka_boundari))
+
+#Clip to Dhaka region
+transport_Dhaka <- st_intersection(transport, shapefile_Dhaka_boundari)
+# transport_Dhaka <- st_crop(transport, shapefile_Dhaka_boundari)
+
+
+
+#Optional
+
+# st_write(transport_Dhaka, "transport_in_dhaka.shp")
+
+
+# Join the hazard_exposure data with the Dhaka shapefile based on ADM3_EN
+shapefile_Dhaka_hazard_exposure <- left_join(shapefile_Dhaka_boundari, hazard_exposure_dhaka, by = "ADM3_EN")
+
+
+
+# Plot the flood risk map
+ggplot() +
+  geom_sf(data = shapefile_Dhaka_hazard_exposure, aes(fill = flood_risk),
+          color = "grey", size = 0.001) +
+  scale_fill_gradient(low = "#ffffcc", high = "#800026", na.value = "gray90",
+                      name = "Flood Risk") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  labs(title = "Flood Risk Map of Dhaka, Bangladesh",
+       subtitle = "Based on Flood Risk and Flash data",
+       caption = "Data Source: INFORM Sub-national Risk Index<br>Created by: Bachir S") +
+  theme_minimal() +
+  theme(
+    plot.title = element_markdown(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_markdown(size = 14, hjust = 0.5),
+    plot.caption = element_markdown(size = 10, hjust = 1),
+    legend.position = c(0.9, 0.6),
+    panel.grid.major = element_line(color = "gray90", size = 0.2),
+    panel.grid.minor = element_blank()
+  ) +
+  coord_sf(datum = NA)
+
+# Plot the shapefile with enhancements
+# ggplot() +
+#   geom_sf(data = shapefile_Dhaka_boundari[shapefile_Dhaka_boundari$ADM1_EN == "Dhaka", ],
+#           fill = "lightblue", color = "black", size = 0.5, alpha = 0.7) +
+#   geom_sf(data = transport_Dhaka, color = "red", size = 0.3, alpha = 0.8) +
+#   labs(title = "Transportation Network in Dhaka, Bangladesh",
+#        subtitle = "Highlighting major roads and transportation infrastructure",
+#        caption = "Data Source: OpenStreetMap | Created by: Bachir S") +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+#     plot.subtitle = element_text(size = 14, hjust = 0.5),
+#     plot.caption = element_text(size = 10, hjust = 1),
+#     legend.position = "none",
+#     panel.grid.major = element_line(color = "gray90", size = 0.2),
+#     panel.grid.minor = element_blank(),
+#     axis.text = element_blank(),
+#     axis.title = element_blank(),
+#     panel.border = element_blank()
+#   ) +
+#   coord_sf(datum = NA)
+
+```
+
+
+```{r}
+hazard_exposure[hazard_exposure$`ADMIN LEVEL-1\r\n(Division)` == "Dhaka", ]
+shapefile_Dhaka_boundari
+```
+
+
+
+```{r}
+# Your R code here
+```
+
+
+
+```{r}
+
+# Set up parallel processing
+plan(multisession)
+# Read all the shapefiles and store in a list
+shapefile_data_list <- lapply(shapefiles, st_read)
+
+# If the columns don't match 
+# select common columns or add missing columns with NA values
+
+common_cols <- Reduce(intersect, lapply(shapefile_data_list, names))
+shapefile_data_list <- lapply(shapefile_data_list, function(x) x[, common_cols])
+
+# Combine the shapefile data frames
+combined_shapefile_data <- do.call(rbind, shapefile_data_list)
+# Plot all the shapefiles together
+ggplot() +
+  geom_sf(data = combined_shapefile_data) +
+  ggtitle("Combined Shapefiles of Dhaka")
+```
+
+
+```{r}
+# Your R code here
+```
+
+
+
+```{r}
+# Your R code here
+```
+
+
+
+```{r}
+# Your R code here
+```
