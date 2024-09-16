@@ -196,3 +196,5 @@ data/
 notebooks/plots/
 
 .Rproj.user
+.RData
+.Rhistory
