@@ -44,7 +44,10 @@ library(ggtext)
 library(viridis)
 library(ggnewscale)
 library(gganimate)
-
+library(data.table)
+library(tidyr)  # Add this line to load tidyr
+library(rmapshaper)
+library(patchwork)  # For arranging multiple plots
 #######Load csv & xlsx
 file_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/INFORM_Sub-national Risk Index for Bangladesh_ 2022_Admin Level 3_V1.xlsx"
 
@@ -61,10 +64,42 @@ names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "ADMIN LEVEL -3 \r\
 names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "Flood Risk ( Riverine and Flash Flood)"] <- "flood_risk"
 
 
+flood_and_climate_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/data_simplified_with_api.csv")
+NL_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/66e5ffb23e839964db5b2042/nightlight_info.csv")
+
+transform_nl_data <- function(NL_data) {
+  # Select relevant columns
+  relevant_cols <- c(
+    grep("^viirs_ntl_annual_v\\d+_avg_masked\\.\\d{4}\\.mean$", names(NL_data), value = TRUE),
+    "Level", "gqid", "id", "shapeGroup", "shapeID", "shapeName", "shapeType"
+  )
+  
+  # Subset the dataframe
+  df <- NL_data[, relevant_cols]
+  
+  # Reshape the dataframe
+  df_long <- df %>%
+    pivot_longer(
+      cols = starts_with("viirs"),
+      names_to = "year",
+      values_to = "VIIRS_NTL"
+    ) %>%
+    # Extract year from the column name
+    mutate(year = as.integer(sub(".*\\.(\\d{4})\\.mean$", "\\1", year))) %>%
+    # Rename Level to level for consistency
+    rename(level = Level)
+  
+  # Reorder columns
+  df_long <- df_long %>%
+    select(VIIRS_NTL, year, level, gqid, id, shapeGroup, shapeID, shapeName, shapeType)
+  
+  return(df_long)
+}
 
 
 
 
+NL_data <- transform_nl_data(NL_data)
 ###### Load shapefile
 # transport_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_transport_a_free_1.shp"  # Example path
 
@@ -72,13 +107,42 @@ waterway_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urba
 
 water_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_water_a_free_1.shp"  # Example path
 
-shapefile_path_boundari <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm4_bbs_20201113.shp"  # Example path
+shapefile_path_boundari_adm4 <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm4_bbs_20201113.shp"  # Example path
+shapefile_path_boundari <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm3_bbs_20201113.shp"  # Example path
+
 #### Read the shapefile
 # transport <- st_read(transport_shapefile_path)
 shapefile_boundari <- st_read(shapefile_path_boundari)
+shapefile_boundari_adm4 <- st_read(shapefile_path_boundari_adm4)
 shapefile_Dhaka_boundari <- shapefile_boundari[shapefile_boundari$ADM1_EN == "Dhaka", ]
+shapefile_Dhaka_boundari_adm4 <- shapefile_boundari_adm4[shapefile_boundari_adm4$ADM1_EN == "Dhaka", ]
 
+transform_and_aggregate_data <- function(input_df, shapefile_boundari) {
+  # Vérifier si le dataframe d'entrée a les colonnes nécessaires
+  if (!all(c("shapeName", "VIIRS_NTL", "year") %in% names(input_df))) {
+    stop("Le dataframe d'entrée doit avoir les colonnes 'shapeName', 'VIIRS_NTL' et 'year'")
+  }
+  
+  # Vérifier si shapefile_boundari a les colonnes nécessaires
+  if (!all(c("ADM4_EN", "ADM3_EN") %in% names(shapefile_boundari))) {
+    stop("shapefile_boundari doit avoir les colonnes 'ADM4_EN' et 'ADM3_EN'")
+  }
+  
+  # Joindre les dataframes
+  result_df <- input_df %>%
+    left_join(shapefile_boundari %>% select(ADM4_EN, ADM3_EN), 
+              by = c("shapeName" = "ADM4_EN"))
+  
+  # Grouper par ADM3_EN et year, puis calculer la moyenne de VIIRS_NTL
+  aggregated_df <- result_df %>%
+    group_by(ADM3_EN, year) %>%
+    summarise(VIIRS_NTL = mean(VIIRS_NTL, na.rm = TRUE)) %>%
+    ungroup()
+  
+  return(aggregated_df)
+}
 
+NL_data <- transform_and_aggregate_data(NL_data, shapefile_Dhaka_boundari_adm4)
 # Définir la zone d'intérêt (boundary)
 # boundary <- shapefile_Dhaka_boundari
 
@@ -116,60 +180,71 @@ water_way_Dhaka <- st_read("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urba
 # Join the hazard_exposure data with the Dhaka shapefile based on ADM3_EN
 shapefile_Dhaka_hazard_exposure <- left_join(shapefile_Dhaka_boundari, hazard_exposure_dhaka, by = "ADM3_EN")
 
+# Merge datasets
+climate_spatial_data <- shapefile_Dhaka_boundari %>%
+  left_join(flood_and_climate_data, by = "ADM3_EN")
 
+# Convert 'year' to numeric if it's not already
+climate_spatial_data$year <- as.numeric(climate_spatial_data$year)
 
-ggplot() +
-  # Flood risk layer
-  geom_sf(data = shapefile_Dhaka_hazard_exposure, aes(fill = flood_risk),
-          color = "white", linewidth = 0.1) +
-  scale_fill_viridis_c(option = "plasma", name = "Flood Risk", 
-                       direction = -1, alpha = 0.7, 
-                       guide = guide_colorbar(order = 1)) +
+# Merge shafile with NL data
+NL_data_spatial <- shapefile_Dhaka_boundari %>%
+  left_join(NL_data, by = "ADM3_EN")  
+
+NL_data_spatial$year <- as.numeric(NL_data_spatial$year)
+
+# ggplot() +
+#   # Flood risk layer
+#   geom_sf(data = shapefile_Dhaka_hazard_exposure, aes(fill = flood_risk),
+#           color = "white", linewidth = 0.1) +
+#   scale_fill_viridis_c(option = "plasma", name = "Flood Risk", 
+#                        direction = -1, alpha = 0.7, 
+#                        guide = guide_colorbar(order = 1)) +
   
-  # New fill scale for water bodies
-  new_scale_fill() +
+#   # New fill scale for water bodies
+#   new_scale_fill() +
   
-  # Water bodies layer
-  geom_sf(data = water_Dhaka, aes(fill = fclass), color = NA, alpha = 0.6) +
-  scale_fill_manual(values = c("wetland" = "#8FBC8F", 
-                               "water" = "#87CEFA",
-                               "reservoir" = "#4682B4",
-                               "dock" = "#20B2AA",
-                               "riverbank" = "#98FB98"),
-                    name = "Water Bodies",
-                    guide = guide_legend(order = 2)) +
+#   # Water bodies layer
+#   geom_sf(data = water_Dhaka, aes(fill = fclass), color = NA, alpha = 0.6) +
+#   scale_fill_manual(values = c("wetland" = "#8FBC8F", 
+#                                "water" = "#87CEFA",
+#                                "reservoir" = "#4682B4",
+#                                "dock" = "#20B2AA",
+#                                "riverbank" = "#98FB98"),
+#                     name = "Water Bodies",
+#                     guide = guide_legend(order = 2)) +
   
-  # Waterways layer
-  geom_sf(data = water_way_Dhaka, aes(color = fclass), linewidth = 0.7) +
-  scale_color_manual(values = c("river" = "#0077BE", 
-                                "canal" = "#40E0D0", 
-                                "stream" = "#48D1CC",
-                                "drain" = "#5F9EA0"),
-                     name = "Waterways",
-                     guide = guide_legend(order = 3)) +
+#   # Waterways layer
+#   geom_sf(data = water_way_Dhaka, aes(color = fclass), linewidth = 0.7) +
+#   scale_color_manual(values = c("river" = "#0077BE", 
+#                                 "canal" = "#40E0D0", 
+#                                 "stream" = "#48D1CC",
+#                                 "drain" = "#5F9EA0"),
+#                      name = "Waterways",
+#                      guide = guide_legend(order = 3)) +
   
-  # Rest of your code (annotations, labels, theme, etc.)
-  annotation_scale(location = "bl", width_hint = 0.3) +
-  annotation_north_arrow(location = "tr", which_north = "true", 
-                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
-                         style = north_arrow_fancy_orienteering) +
-  labs(title = "Flood Risk and Water Features in Dhaka, Bangladesh (2022)",
-       subtitle = "Visualizing flood vulnerability, water bodies, and hydrological networks",
-       caption = "Data: INFORM Sub-national Risk Index & OpenStreetMap 2022 | Created by: Bachir S") +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 14, hjust = 0.5, margin = margin(b = 20)),
-    plot.caption = element_text(size = 10, hjust = 1, margin = margin(t = 20)),
-    legend.position = "right",
-    legend.box = "vertical",
-    legend.margin = margin(t = 10, b = 10, l = 10, r = 10),
-    panel.grid.major = element_line(color = "gray90", linewidth = 0.2),
-    panel.grid.minor = element_blank(),
-    plot.background = element_rect(fill = "white", color = NA),
-    panel.background = element_rect(fill = "white", color = NA)
-  ) +
-  coord_sf(datum = NA)
+#   # Rest of your code (annotations, labels, theme, etc.)
+#   annotation_scale(location = "bl", width_hint = 0.3) +
+#   annotation_north_arrow(location = "tr", which_north = "true", 
+#                          pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+#                          style = north_arrow_fancy_orienteering) +
+#   labs(title = "Flood Risk and Water Features in Dhaka, Bangladesh (2022)",
+#        subtitle = "Visualizing flood vulnerability, water bodies, and hydrological networks",
+#        caption = "Source: INFORM Sub-national Risk Index & OpenStreetMap 2022 | Created by: Bachir Sabo") +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+#     plot.subtitle = element_text(size = 14, hjust = 0.5, margin = margin(b = 20)),
+#     plot.caption = element_text(size = 10, hjust = 1, margin = margin(t = 20)),
+#     legend.position = "right",
+#     legend.box = "vertical",
+#     legend.margin = margin(t = 10, b = 10, l = 10, r = 10),
+#     panel.grid.major = element_line(color = "gray90", linewidth = 0.2),
+#     panel.grid.minor = element_blank(),
+#     plot.background = element_rect(fill = "white", color = NA),
+#     panel.background = element_rect(fill = "white", color = NA)
+#   ) +
+#   coord_sf(datum = NA)
 
 # Plot the shapefile with enhancements
 # ggplot() +
@@ -197,13 +272,15 @@ ggplot() +
 
 
 ```{r}
-
+#Simpler plot
 ggplot() +
   # Flood risk layer
   geom_sf(data = shapefile_Dhaka_hazard_exposure, aes(fill = flood_risk),
-          color = "white", linewidth = 0.1) +
-  scale_fill_viridis_c(option = "plasma", name = "Flood Risk", 
-                       direction = -1, alpha = 0.7, 
+          color = "white", linewidth = 0.0001, alpha = 0.7) +  # Move alpha here
+  scale_fill_gradientn(colors = c("#FFFFD9", "#FED98E", "#FE9929", "#D95F0E", "#993404"),
+                       breaks = c(0.0, 2.5, 5.0, 7.5),
+                       labels = c("0.0", "2.5", "5.0", "7.5"),
+                       name = "Flood Risk",
                        guide = guide_colorbar(order = 1)) +
   
   # New fill scale for water bodies
@@ -230,9 +307,9 @@ ggplot() +
   annotation_north_arrow(location = "tr", which_north = "true", 
                          pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
                          style = north_arrow_fancy_orienteering) +
-  labs(title = "Flood Risk and Water Features in Dhaka, Bangladesh (2022)",
-       subtitle = "Visualizing flood vulnerability, water bodies, and hydrological networks",
-       caption = "Data: INFORM Sub-national Risk Index & OpenStreetMap 2022 | Created by: Bachir S") +
+  labs(title = "High Flood Risk Dominates Dhaka's Periphery, \n Central Areas Show Lower Vulnerability",
+       subtitle = "Flood risk assessment with water bodies and hydrological networks in Dhaka, Bangladesh (2022)",
+       caption = "Source: INFORM Sub-national Risk Index & OpenStreetMap 2022 | Created by: Bachir Sabo") +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
@@ -253,45 +330,577 @@ ggplot() +
 
 
 ```{r}
-# Your R code here
+
+
+
+create_animation_plot <- function(data, variable, title, fill_label) {
+  ggplot(data) +
+    geom_sf(aes_string(fill = variable), color = NA) +
+    scale_fill_viridis_c(option = "plasma", name = fill_label) +
+    labs(title = title,
+         subtitle = 'Year: {frame_time}',
+         caption = "Data Source:CEMS GloFAS Historical Dataset, Copernicus Climate Data Store (CDS) & OpenStreetMap | Visualization: Bachir Sabo") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 12),
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 8),
+      plot.caption = element_text(size = 8),
+      axis.text = element_blank(),
+      axis.title = element_blank(),
+      panel.grid = element_blank()
+    ) +
+    transition_time(year) +
+    ease_aes('linear')
+}
+
+# Rain Sum Animation
+rain_animation <- create_animation_plot(
+  data = climate_spatial_data,
+  variable = "rain_sum",
+  title = "Yearly Evolution of Rain Sum in Dhaka",
+  fill_label = "Rain Sum (mm)"
+)
+
+# Precipitation Sum Animation
+precipitation_animation <- create_animation_plot(
+  data = climate_spatial_data,
+  variable = "precipitation_sum",
+  title = "Yearly Evolution of Precipitation Sum in Dhaka",
+  fill_label = "Precipitation Sum (mm)"
+)
+
+# River Discharge Animation
+river_discharge_animation <- create_animation_plot(
+  data = climate_spatial_data,
+  variable = "river_discharge",
+  title = "Yearly Evolution of River Discharge in Dhaka",
+  fill_label = "River Discharge (m³/s)"
+)
+
+# Temperature Animation
+temperature_animation <- create_animation_plot(
+  data = climate_spatial_data,
+  variable = "temperature_2m_mean",
+  title = "Yearly Evolution of Mean Temperature in Dhaka",
+  fill_label = "Temperature (°C)"
+)
+
+# Combine the plots
+combined_animation <- (rain_animation | precipitation_animation) /
+                      (river_discharge_animation | temperature_animation)
+
+animation <- animate(combined_animation, nframes = 100, fps = 10, width = 800, height = 800)
+
+# Save the animation
+anim_save("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/reports/dhaka_climate_animation.gif", animation = animation)
+
 ```
 
 
 
 ```{r}
+library(animation)
+library(gifski)
+# Join NL_data with shapefile_Dhaka_boundari
+nl_spatial_data <- shapefile_Dhaka_boundari %>%
+  left_join(NL_data, by = "ADM3_EN")
 
-# Set up parallel processing
-plan(multisession)
-# Read all the shapefiles and store in a list
-shapefile_data_list <- lapply(shapefiles, st_read)
+# Create the animated plot
+animated_plot <- ggplot(nl_spatial_data) +
+  geom_sf(aes(fill = VIIRS_NTL), color = "grey80", size = 0.001) +
+  scale_fill_gradient(low = "#000033", high = "#00FFFF", name = "Night Light") +
+  labs(
+    title = "Yearly Evolution of Night Light in Dhaka",
+    subtitle = 'Year: {frame_time}',
+    caption = "Data Source: Earth Observation Group - VIIRS Nighttime Lights & OpenStreetMap | Visualization: Bachir Sabo"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5, color = "white"),
+    plot.subtitle = element_text(size = 14, hjust = 0.5, color = "white"),
+    plot.caption = element_text(size = 10, color = "white"),
+    legend.position = "right",
+    legend.title = element_text(size = 12, color = "white"),
+    legend.text = element_text(size = 10, color = "white"),
+    panel.background = element_rect(fill = "#000022"),
+    plot.background = element_rect(fill = "#000022")
+  ) +
+  transition_time(year) +
+  ease_aes('linear')
 
-# If the columns don't match 
-# select common columns or add missing columns with NA values
+# Render the animation
+animation <- animate(animated_plot, nframes = 100, fps = 10, width = 800, height = 600)
 
-common_cols <- Reduce(intersect, lapply(shapefile_data_list, names))
-shapefile_data_list <- lapply(shapefile_data_list, function(x) x[, common_cols])
 
-# Combine the shapefile data frames
-combined_shapefile_data <- do.call(rbind, shapefile_data_list)
-# Plot all the shapefiles together
-ggplot() +
-  geom_sf(data = combined_shapefile_data) +
-  ggtitle("Combined Shapefiles of Dhaka")
+anim_save("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/reports/dhaka_nightlight_animation.gif", animation = animation)
+
+# Set the output file path
+output_file <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/reports/dhaka_nightlight_animation.gif"
+
+# Render and save the animation
+animate(
+  animated_plot,
+  nframes = 100,
+  fps = 10,
+  width = 800,
+  height = 600,
+  renderer = gifski_renderer(output_file)
+)
+
 ```
 
 
 ```{r}
 # Your R code here
+
+# Define a custom theme for all maps
+map_theme <- theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, hjust = 0.5),
+    legend.position = "bottom",
+    legend.key.size = unit(0.5, "cm"),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 10),
+    panel.grid.major = element_line(color = "gray90", size = 0.1),
+    panel.grid.minor = element_blank()
+  )
+
+# Map 1: Flood risk map
+map1 <- ggplot() +
+  geom_sf(data = shapefile_Dhaka_hazard_exposure, aes(fill = flood_risk), color = NA) +
+  scale_fill_gradientn(colors = c("#FFFFD9", "#FED98E", "#FE9929", "#D95F0E", "#993404"),
+                       breaks = c(0.0, 2.5, 5.0, 7.5),
+                       labels = c("0.0", "2.5", "5.0", "7.5"),
+                       name = "Flood Risk") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  map_theme +
+  labs(title = "Flood Risk in Dhaka, Bangladesh (2022)")+
+  coord_sf(datum = NA) +  theme(
+    plot.title = element_text(size = 20, face = "bold"),  # Increased title size
+    legend.key.size = unit(1.2, "cm"),  # Increase legend key size further
+    legend.text = element_text(size = 12),  # Increase legend text size further
+    legend.title = element_text(size = 20, face = "bold"),  # Increase legend title size further
+    legend.spacing.y = unit(0.7, "cm"),  # Add more vertical space between legend items
+    legend.box = "vertical",  # Stack legends vertically
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10),  # Add margin around the entire legend
+    legend.box.margin = margin(t = 10, r = 10, b = 10, l = 10)  # Add margin around the legend box
+  ) +
+    guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = 10, barheight = 0.5))
+
+# Map 2: Night Light Intensity map
+map2 <- ggplot() +
+  geom_sf(data = shapefile_Dhaka_boundari %>% 
+            left_join(NL_data %>% filter(year == 2022), by = "ADM3_EN"), 
+          aes(fill = VIIRS_NTL), color = NA) +
+  scale_fill_gradient(low = "black", high = "yellow", name = "VIIRS Nighttime Lights (Radiance)",
+                      guide = guide_colorbar(
+                        title.position = "top",
+                        title.hjust = 0.5,
+                        barwidth = 10,
+                        barheight = 0.5
+                      )) +
+  annotation_scale(location = "bl", width_hint = 0.3, color = "black") +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering(fill = "black", line_col = "black")) +
+  map_theme +
+  labs(title = "Night Light Intensity in Dhaka (2022)") +
+  coord_sf(datum = NA) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5, color = "black"),
+    legend.key.size = unit(1.2, "cm"),  # Increase legend key size further
+    legend.text = element_text(size = 12),  # Increase legend text size further
+    legend.title = element_text(size = 20, face = "bold"),  # Increase legend title size further
+    legend.spacing.y = unit(0.7, "cm"),  # Add more vertical space between legend items
+    legend.box = "vertical",  # Stack legends vertically
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10),  # Add margin around the entire legend
+    legend.box.margin = margin(t = 10, r = 10, b = 10, l = 10)  # Add margin around the legend box
+  ) + 
+  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = 10, barheight = 0.5))
+
+
+
+
+
+
+
+
+# First, ensure we have the log transformation function
+log_scale <- function(x) {
+  scaled <- (log(x + 1) - log(min(x) + 1)) / (log(max(x) + 1) - log(min(x) + 1))
+  scaled * (max(x) - min(x)) + min(x)
+}
+
+# Apply the log transformation to the VIIRS_NTL data
+NL_data_spatial$VIIRS_NTL_log <- log_scale(NL_data_spatial$VIIRS_NTL)
+NL_data_spatial$VIIRS_NTL_cbrt <- sign(NL_data_spatial$VIIRS_NTL) * abs(NL_data_spatial$VIIRS_NTL)^(1/3)
+
+# Create the animation using the log-transformed data
+simple_animation <- ggplot(NL_data_spatial) +
+  geom_sf(aes(fill = VIIRS_NTL_cbrt), color = NA) +
+  scale_fill_gradient(low = "black", high = "yellow", 
+                      name = "VIIRS Nighttime Lights (Radiance Cube Root Transformed )",
+                      guide = guide_colorbar(title.position = "top", 
+                                             title.hjust = 0.5,
+                                             barwidth = 10, 
+                                             barheight = 0.5)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    legend.key.size = unit(0.8, "cm"),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.position = "bottom",
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.title = element_blank()
+  ) +
+  labs(title = "Night Light Intensity in Dhaka",
+       subtitle = "Year: {as.integer(frame_time)}") +
+  transition_time(year) +
+  ease_aes('linear')
+
+# Render the animation
+anim <- animate(simple_animation, 
+                nframes = 120,  # 10 frames per year
+                fps = 10, 
+                width = 800, 
+                height = 600,
+                renderer = gifski_renderer("simple_night_light_animation.gif"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+map2_animation <- ggplot() +
+  geom_sf(data = NL_data_spatial, aes(fill = VIIRS_NTL), color = NA) +
+  scale_fill_gradient(low = "black", high = "yellow", name = "VIIRS Nighttime Lights (Radiance)",
+                      guide = guide_colorbar(
+                        title.position = "top",
+                        title.hjust = 0.5,
+                        barwidth = 10,
+                        barheight = 0.5
+                      )) +
+  annotation_scale(location = "bl", width_hint = 0.3, color = "black") +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering(fill = "black", line_col = "black")) +
+  map_theme +
+  labs(title = "Night Light Intensity in Dhaka: {frame_time}") +
+  coord_sf(datum = NA) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5, color = "black"),
+    plot.subtitle = element_text(size = 16, hjust = 0.5, color = "red", face = "bold"),
+    legend.key.size = unit(1.2, "cm"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.spacing.y = unit(0.7, "cm"),
+    legend.box = "vertical",
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10),
+    legend.box.margin = margin(t = 10, r = 10, b = 10, l = 10)
+  ) + 
+  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = 10, barheight = 0.5)) +
+  transition_time(year) +
+  ease_aes('linear') +
+  labs(subtitle = "Flash floods occurred in 2017") +
+  view_follow(fixed_y = TRUE)
+
+night_light_animation <- animate(map2_animation, nframes = 200, fps = 10, width = 800, height = 600,
+                                 renderer = gifski_renderer("night_light_animation.gif"))
+# Display the animation
+night_light_animation
+
+
+# # Display the animation
+# precipitation_animation
+# Map 3: Precipitation map for 2022
+map3 <- ggplot() +
+  geom_sf(data = climate_spatial_data %>% filter(year == 2022), 
+          aes(fill = precipitation_sum), color = NA) +
+  scale_fill_viridis_c(option = "viridis", name = "Precipitation (mm)") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  map_theme +
+  labs(title = "Precipitation in Dhaka (2022)") +
+  coord_sf(datum = NA) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),  # Increased title size
+    legend.key.size = unit(1.2, "cm"),  # Increase legend key size further
+    legend.text = element_text(size = 12),  # Increase legend text size further
+    legend.title = element_text(size = 20, face = "bold"),  # Increase legend title size further
+    legend.spacing.y = unit(0.7, "cm"),  # Add more vertical space between legend items
+    legend.box = "vertical",  # Stack legends vertically
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10),  # Add margin around the entire legend
+    legend.box.margin = margin(t = 10, r = 10, b = 10, l = 10)  # Add margin around the legend box
+  ) + 
+  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = 10, barheight = 0.5))
+
+
+# Map 3: Precipitation animation
+map3_animation <- ggplot() +
+  geom_sf(data = climate_spatial_data, aes(fill = precipitation_sum), color = NA) +
+  scale_fill_viridis_c(option = "viridis", name = "Precipitation (mm)") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  map_theme +
+  labs(title = "Precipitation in Dhaka: {as.integer(frame_time)}") +
+  coord_sf(datum = NA) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    legend.key.size = unit(1.2, "cm"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.spacing.y = unit(0.5, "cm"),
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10)
+  ) +
+  transition_time(year) +
+  ease_aes('linear')
+
+# Render the animation
+precipitation_animation <- animate(map3_animation, nframes = 200, fps = 10, width = 800, height = 600,
+                                   renderer = gifski_renderer("precipitation_animation.gif"))
+
+
+# Map 4: Water bodies and waterways
+map4 <- ggplot() +
+  geom_sf(data = water_Dhaka, aes(fill = fclass), color = NA, alpha = 0.8) +
+  scale_fill_manual(values = c("water" = "#87CEFA", "dock" = "#20B2AA", "wetland" = "#300101","riverbank"="grey", "Other" = "#B0E0E6"),
+                    name = "Water Bodies") +
+  geom_sf(data = filter(water_way_Dhaka, fclass %in% c("river", "canal", "stream", "drain")), 
+          aes(color = fclass), linewidth = 0.7) +
+  scale_color_manual(values = c("river" = "#1E90FF", "canal" = "#00CED1", "stream" = "#20B2AA",
+                                "drain" = "red"),
+                     name = "Waterways") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  map_theme +
+  labs(title = "Water Bodies and Waterways in Dhaka") +
+  coord_sf(datum = NA) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),  # Increased title size
+    legend.key.size = unit(1.2, "cm"),  # Increase legend key size further
+    legend.text = element_text(size = 12),  # Increase legend text size further
+    legend.title = element_text(size = 20, face = "bold"),  # Increase legend title size further
+    legend.spacing.y = unit(0.7, "cm"),  # Add more vertical space between legend items
+    legend.box = "vertical",  # Stack legends vertically
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10),  # Add margin around the entire legend
+    legend.box.margin = margin(t = 10, r = 10, b = 10, l = 10)  # Add margin around the legend box
+  ) +
+  guides(
+    fill = guide_legend(title = "Water Bodies", order = 1),
+    color = guide_legend(title = "Waterways", order = 2)
+  ) + 
+  guides(
+    fill = guide_legend(title = "Water Bodies", order = 1, title.position = "top", title.hjust = 0.5),
+    color = guide_legend(title = "Waterways", order = 2, title.position = "top", title.hjust = 0.5)
+  )
+
+
+# Combine all maps
+combined_plot <- (map1 + map2) / (map3 + map4) +
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom",
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20))
+
+# Add overall title and caption
+combined_plot <- combined_plot +
+  plot_annotation(
+    title = "Flood Risk Analysis in Dhaka, Bangladesh (2022)",
+    subtitle = "Examining flood vulnerability, precipitation patterns, urban development, and hydrological features",
+    caption = "Source: CEMS GloFAS Historical Dataset, Copernicus Climate Data Store (CDS), \n INFORM Sub-national Risk Index & OpenStreetMap 2022 | Vizualisation : Bachir Sabo",
+    theme = theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+                  plot.subtitle = element_text(size = 14, hjust = 0.5),
+                  plot.caption = element_text(size = 10, hjust = 1))
+  )
+
+# Display the combined plot
+combined_plot
+
 ```
 
 
 
 ```{r}
-# Your R code here
+# Night Light Intensity map whith different VIIRS transformations
+# create_and_save_static_map <- function(data, value_col, title, filename) {
+#   map <- ggplot(data) +
+#     geom_sf(aes(fill = !!sym(value_col)), color = NA) +
+#     scale_fill_gradient(low = "black", high = "yellow", 
+#                         name = "VIIRS Nighttime Lights",
+#                         guide = guide_colorbar(title.position = "top", 
+#                                                title.hjust = 0.5,
+#                                                barwidth = 10, 
+#                                                barheight = 0.5)) +
+#     theme_minimal() +
+#     theme(
+#       plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+#       plot.subtitle = element_text(size = 12, hjust = 0.5),
+#       legend.key.size = unit(1, "cm"),
+#       legend.text = element_text(size = 10),
+#       legend.title = element_text(size = 12, face = "bold"),
+#       legend.position = "bottom"
+#     ) +
+#     labs(title = title,
+#          subtitle = "Dhaka, Bangladesh - 2023",
+#          caption = "Data: VIIRS Nighttime Lights | Visualization: Your Name") +
+#     coord_sf(datum = NA)
+  
+#   ggsave(filename, map, width = 10, height = 8, dpi = 300)
+#   return(map)
+# }
+
+# # Apply transformations
+# NL_data_spatial$VIIRS_NTL_sqrt <- sqrt(NL_data_spatial$VIIRS_NTL)
+# NL_data_spatial$VIIRS_NTL_cbrt <- sign(NL_data_spatial$VIIRS_NTL) * abs(NL_data_spatial$VIIRS_NTL)^(1/3)
+# NL_data_spatial$VIIRS_NTL_asinh <- asinh(NL_data_spatial$VIIRS_NTL)
+# NL_data_spatial$VIIRS_NTL_power <- sign(NL_data_spatial$VIIRS_NTL) * abs(NL_data_spatial$VIIRS_NTL)^0.5
+
+# log_scale <- function(x) {
+#   scaled <- (log(x + 1) - log(min(x) + 1)) / (log(max(x) + 1) - log(min(x) + 1))
+#   scaled * (max(x) - min(x)) + min(x)
+# }
+# NL_data_spatial$VIIRS_NTL_log_scale <- log_scale(NL_data_spatial$VIIRS_NTL)
+
+# # Create maps
+# # Create and save maps
+# map_original <- create_and_save_static_map(NL_data_spatial, "VIIRS_NTL", "Original VIIRS Nighttime Lights", "nightlight_original.png")
+# map_sqrt <- create_and_save_static_map(NL_data_spatial, "VIIRS_NTL_sqrt", "Square Root Transformed VIIRS Nighttime Lights", "nightlight_sqrt.png")
+# map_cbrt <- create_and_save_static_map(NL_data_spatial, "VIIRS_NTL_cbrt", "Cube Root Transformed VIIRS Nighttime Lights", "nightlight_cbrt.png")
+# map_asinh <- create_and_save_static_map(NL_data_spatial, "VIIRS_NTL_asinh", "Asinh Transformed VIIRS Nighttime Lights", "nightlight_asinh.png")
+# map_power <- create_and_save_static_map(NL_data_spatial, "VIIRS_NTL_power", "Power (0.5) Transformed VIIRS Nighttime Lights", "nightlight_power.png")
+# map_log_scale <- create_and_save_static_map(NL_data_spatial, "VIIRS_NTL_log_scale", "Scaled Log Transformed VIIRS Nighttime Lights", "nightlight_log_scale.png")
+
+# # Display each map (optional)
+# print(map_original)
+# print(map_sqrt)
+# print(map_cbrt)
+# print(map_asinh)
+# print(map_power)
+# print(map_log_scale)
+
 ```
 
 
 
 ```{r}
-# Your R code here
+# Animated plot
+
+# Variables to visualize
+variables_to_plot <- c("rain_sum", "precipitation_sum", "river_discharge", "temperature_2m_mean")
+
+# Separate geometry from non-geometry data
+non_geometry_data <- climate_spatial_data %>%
+  st_drop_geometry() %>%  # Drop geometry to simplify data
+  select(ADM3_EN, year, all_of(variables_to_plot))
+
+geometry_data <- climate_spatial_data %>%
+  select(ADM3_EN, year, geometry)
+
+# Reshape data
+climate_long <- non_geometry_data %>%
+  pivot_longer(
+    cols = all_of(variables_to_plot),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+# First join (optional, can be skipped if not needed)
+# climate_long <- climate_long %>%
+#   left_join(geometry_data, by = c("ADM3_EN", "year"))
+
+# Aggregate geometry to ensure uniqueness
+geometry_data <- geometry_data %>%
+  group_by(ADM3_EN, year) %>%
+  summarize(geometry = st_union(geometry), .groups = 'drop')
+
+# Simplify geometries during aggregation
+geometry_data_simplified <- geometry_data %>%
+  group_by(ADM3_EN, year) %>%
+  summarize(geometry = st_union(geometry), .groups = 'drop') %>%
+  ms_simplify(keep = 0.05, keep_shapes = TRUE)
+
+
+
+# Join simplified geometries
+climate_long <- climate_long %>%
+  left_join(geometry_data_simplified, by = c("ADM3_EN", "year"))
+
+# Remove any duplicate geometry columns
+climate_long <- climate_long %>%
+  select(-geometry.x) %>%
+  rename(geometry = geometry.y)
+
+# Convert to sf object
+climate_long_sf <- st_as_sf(climate_long)
+
+# Variable labels
+variable_labels <- c(
+  rain_sum = "Rain Sum (mm)",
+  precipitation_sum = "Precipitation Sum (mm)",
+  river_discharge = "River Discharge (m³/s)",
+  temperature_2m_mean = "Mean Temperature (°C)"
+)
+
+# Create the animated plot
+animated_plot <- ggplot(climate_long_sf) +
+  geom_sf(aes(fill = value), color = NA) +
+  scale_fill_viridis_c(option = "plasma", name = "", na.value = "grey50") +
+  facet_wrap(~ variable, ncol = 2, scales = "free", labeller = as_labeller(variable_labels)) +
+  labs(
+    title = "Yearly Evolution of Climate Variables in Dhaka",
+    subtitle = 'Year: {frame_time}',
+    caption = "Data Source: CEMS GloFAS Historical Dataset, Copernicus Climate Data Store (CDS) & OpenStreetMap | Visualization: Bachir Sabo"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 14),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  transition_time(year) +
+  ease_aes('linear')
+
+# Render the animation
+animation <- animate(animated_plot, nframes = 100, fps = 10, width = 800, height = 800)
+
+# Save the animation
+anim_save("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/reports/dhaka_climate_animation.gif", animation = animation)
+
+
+
 ```
