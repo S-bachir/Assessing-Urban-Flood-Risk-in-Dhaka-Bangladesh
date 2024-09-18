@@ -112,6 +112,7 @@ The project includes the following key visualizations:
 
 - **Incorporate Upstream Data**: Include upstream precipitation and river flow data to account for transboundary water contributions.
 - **Higher Resolution Modeling**: Use finer spatial and temporal scales to capture local variations more accurately.
+- **Interactive Map Dashboard**: Develop an interactive map dashboard using tools like RShiny or other web-based frameworks to allow users to explore flood risk data dynamically.
 
 
 ## Contributors
