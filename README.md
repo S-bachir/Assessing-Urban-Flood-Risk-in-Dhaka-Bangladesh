@@ -99,7 +99,7 @@ The project includes the following key visualizations:
 
 2. **NightTime Lights**: Visualization of VIIRS Nighttime Lights for 2023.
 
-    ![NightTime Lights](reports/plots/nightlight_log_scale.gif)
+    ![NightTime Lights](reports/plots/nightlight_log_scale.png)
 
 3. **Dhaka Normalized Trends**: Visualization of normalized VIIRS Nighttime Lights, Precipitation, and Discharge from 2010 to 2024.
 
