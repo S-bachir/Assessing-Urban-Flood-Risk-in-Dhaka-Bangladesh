@@ -66,6 +66,18 @@ transform_and_aggregate_data <- function(input_df, shapefile_boundari) {
   
   return(aggregated_df)
 }
+
+########## Feature engineering functions##########
+# Function to normalize data to 0-1 scale
+normalize <- function(x) {
+  (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+}
+
+# Function to apply log scale transformation
+log_scale <- function(x) {
+  scaled <- (log(x + 1) - log(min(x) + 1)) / (log(max(x) + 1) - log(min(x) + 1))
+  scaled * (max(x) - min(x)) + min(x)
+}
 ```
 
 ```{r}
@@ -147,18 +159,31 @@ combined_data <- combined_data %>%
 # Convert ADM3_EN to factor
 combined_data$ADM3_EN <- as.factor(combined_data$ADM3_EN)
 
+
+combined_data_sf <- combined_data %>%
+  left_join(shapefile_Dhaka_boundari, by = "ADM3_EN") %>%
+  st_as_sf()
+
 ```
 
 
 
 ```{r}
 
+data_2017 <- combined_data_sf %>%
+  filter(year == 2017)
+
+ggplot(data_2017) +
+  geom_sf(aes(fill = river_discharge), color = NA) +
+  scale_fill_viridis_c(name = "River Discharge") +
+  theme_minimal() +
+  labs(title = "River Discharge in 2017")
 ```
 
 
 
 ```{r}
-
+unique(flood_and_climate_data[flood_and_climate_data$year==2020,]$river_discharge)
 ```
 
 
