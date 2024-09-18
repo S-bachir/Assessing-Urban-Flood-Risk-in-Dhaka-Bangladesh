@@ -53,9 +53,11 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
 
 - **Software**: R, Python
 - **R Libraries**:
-  - Data Processing: `dplyr`, `readxl`
-  - Geospatial Analysis: `sf`, `ggspatial`
-  - Visualization: `ggplot2`, `ggthemes`, `ggtext`, `gganimate`
+  - Data Processing: `dplyr`, `data.table`, `readxl`, `tidyr`, `lubridate`
+  - Geospatial Analysis: `sf`, `ggspatial`, `spdep`, `tmap`
+  - Visualization: `ggplot2`, `ggthemes`, `ggtext`, `gganimate`, `ggcorrplot`, `ggimage`, `ggnewscale`
+  - Statistical Modeling: `mgcv`, `car`, `spatialreg`
+  - Animation: `gganimate`, `gifski`, `animation`
 - **Python Libraries**:
   - Data Processing: `pandas`, `numpy`
   - Geospatial Analysis: `geopandas`, `rasterio`, `gdal`
