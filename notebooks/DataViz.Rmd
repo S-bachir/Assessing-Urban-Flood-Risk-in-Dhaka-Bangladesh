@@ -1,71 +1,43 @@
 
 
 ```{r}
-# library(sf)
-# library(ggplot2)
-# library(future.apply)
-# library(dplyr)
-# library(ggthemes)
 
-# # Directory where the shapefiles are located
-# directory <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/"
+#------------------------------------------------------------------------------#
+#Packages/library importation
+#------------------------------------------------------------------------------#
 
-# # Get the list of shapefiles in the directory
-# shapefiles <- list.files(directory, pattern = "\\.shp$", full.names = TRUE)
-
-# for (shapefile in shapefiles) {
-#     shapefile_data <- st_read(shapefile)
-    
-#     # Simplify geometry (use tolerance value appropriate for your data)
-#     shapefile_data_simplified <- st_simplify(shapefile_data, dTolerance = 0.01)
-    
-#     # Plot simplified shapefile
-#     ggplot() +
-#       geom_sf(data = shapefile_data_simplified) +
-#       ggtitle(paste("Simplified Shapefile:", basename(shapefile))) +
-#       print()  # Print each plot
-# }
-
+library(data.table)
+library(dplyr)
+library(gganimate)
+library(ggcorrplot)
+library(ggimage)
+library(ggnewscale)
+library(ggplot2)
+library(ggspatial)
+library(ggtext)
+library(ggthemes)
+library(grid)
+library(gridExtra)
+library(lubridate)
+library(magick)
+library(patchwork) # For arranging multiple plots
+library(png)
+library(readxl)
+library(rmapshaper)
+library(scales)
+library(sf)
+library(tidyr)
+library(viridis)
 
 
 ```
 
 
-
 ```{r}
-# install.packages("rlang")
-library(sf)
-library(ggplot2)
-library(dplyr)
-library(ggthemes)
-library(readxl)
-library(ggspatial)
-library(ggtext)
-library(viridis)
-library(ggnewscale)
-library(gganimate)
-library(data.table)
-library(tidyr)  # Add this line to load tidyr
-library(rmapshaper)
-library(patchwork)  # For arranging multiple plots
-#######Load csv & xlsx
-file_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/INFORM_Sub-national Risk Index for Bangladesh_ 2022_Admin Level 3_V1.xlsx"
-
-### Read the "INFORM Upazila" sheet
-inform_upazila <- read_excel(file_path, sheet = "INFORM Upazila")
-inform_upazila <- inform_upazila[-c(1:3), ]
-### Read the "Hazard & Exposure" sheet
-hazard_exposure <- read_excel(file_path, sheet = "Hazard & Exposure")
-hazard_exposure <- hazard_exposure[-c(1:3), ]
-# Filter hazard_exposure for Dhaka division
-hazard_exposure_dhaka <- hazard_exposure[hazard_exposure$`ADMIN LEVEL-1\r\n(Division)` == "Dhaka", ]
-# Rename columns for easier handling
-names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "ADMIN LEVEL -3 \r\n(Upazila)"] <- "ADM3_EN"
-names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "Flood Risk ( Riverine and Flash Flood)"] <- "flood_risk"
-
-
-flood_and_climate_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/data_simplified_with_api.csv")
-NL_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/66e5ffb23e839964db5b2042/nightlight_info.csv")
+#------------------------------------------------------------------------------#
+#Utils functions
+#------------------------------------------------------------------------------#
+################## Data transformation functions##################
 
 transform_nl_data <- function(NL_data) {
   # Select relevant columns
@@ -97,26 +69,6 @@ transform_nl_data <- function(NL_data) {
 }
 
 
-
-
-NL_data <- transform_nl_data(NL_data)
-###### Load shapefile
-# transport_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_transport_a_free_1.shp"  # Example path
-
-waterway_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_waterways_free_1.shp"  # Example path
-
-water_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_water_a_free_1.shp"  # Example path
-
-shapefile_path_boundari_adm4 <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm4_bbs_20201113.shp"  # Example path
-shapefile_path_boundari <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm3_bbs_20201113.shp"  # Example path
-
-#### Read the shapefile
-# transport <- st_read(transport_shapefile_path)
-shapefile_boundari <- st_read(shapefile_path_boundari)
-shapefile_boundari_adm4 <- st_read(shapefile_path_boundari_adm4)
-shapefile_Dhaka_boundari <- shapefile_boundari[shapefile_boundari$ADM1_EN == "Dhaka", ]
-shapefile_Dhaka_boundari_adm4 <- shapefile_boundari_adm4[shapefile_boundari_adm4$ADM1_EN == "Dhaka", ]
-
 transform_and_aggregate_data <- function(input_df, shapefile_boundari) {
   # Vérifier si le dataframe d'entrée a les colonnes nécessaires
   if (!all(c("shapeName", "VIIRS_NTL", "year") %in% names(input_df))) {
@@ -141,6 +93,99 @@ transform_and_aggregate_data <- function(input_df, shapefile_boundari) {
   
   return(aggregated_df)
 }
+
+########## Feature engineering functions##########
+# Function to normalize data to 0-1 scale
+normalize <- function(x) {
+  (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+}
+
+# Function to apply log scale transformation
+log_scale <- function(x) {
+  scaled <- (log(x + 1) - log(min(x) + 1)) / (log(max(x) + 1) - log(min(x) + 1))
+  scaled * (max(x) - min(x)) + min(x)
+}
+
+
+```
+
+```{r}
+#------------------------------------------------------------------------------#
+#Data importation
+#------------------------------------------------------------------------------#
+
+# Flood_2016_shapefile <- st_read("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/eo4sd_dhaka_flood_2016/EO4SD_DHAKA_FLOOD_2016.shp")
+# flood_2014_shapefile <- st_read("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/eo4sd_dhaka_flood_2014/EO4SD_DHAKA_FLOOD_2014.shp")
+
+# Flood_2016_shapefile <- st_transform(Flood_2016_shapefile, st_crs(shapefile_Dhaka_boundari))
+# flood_2014_shapefile <- st_transform(flood_2014_shapefile, st_crs(shapefile_Dhaka_boundari))
+
+# # Verify that all shapefiles now have the same CRS
+# st_crs(Flood_2016_shapefile) == st_crs(shapefile_Dhaka_boundari)
+# st_crs(flood_2014_shapefile) == st_crs(shapefile_Dhaka_boundari)
+
+# # Intersect flood shapefiles with Dhaka boundary
+# flood_2014_dhaka <- st_intersection(flood_2014_shapefile, shapefile_Dhaka_boundari)
+# flood_2016_dhaka <- st_intersection(Flood_2016_shapefile, shapefile_Dhaka_boundari)
+
+# # Add year column
+# flood_2014_dhaka$year <- 2014
+# flood_2016_dhaka$year <- 2016
+
+# st_write(flood_2014_dhaka, "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/flood_2014_in_dhaka.shp")
+# st_write(flood_2016_dhaka, "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/flood_2016_in_dhaka.shp")
+flood_2014_dhaka <- st_read("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/flood_2014_in_dhaka.shp")
+flood_2016_dhaka <- st_read("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/flood_2016_in_dhaka.shp")
+
+
+
+# Combine the datasets
+combined_flood_data <- rbind(flood_2014_dhaka, flood_2016_dhaka)
+
+####### Load csv & xlsx
+file_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/INFORM_Sub-national Risk Index for Bangladesh_ 2022_Admin Level 3_V1.xlsx"
+
+### Read the "INFORM Upazila" sheet
+inform_upazila <- read_excel(file_path, sheet = "INFORM Upazila")
+inform_upazila <- inform_upazila[-c(1:3), ]
+### Read the "Hazard & Exposure" sheet
+hazard_exposure <- read_excel(file_path, sheet = "Hazard & Exposure")
+hazard_exposure <- hazard_exposure[-c(1:3), ]
+# Filter hazard_exposure for Dhaka division
+hazard_exposure_dhaka <- hazard_exposure[hazard_exposure$`ADMIN LEVEL-1\r\n(Division)` == "Dhaka", ]
+# Rename columns for easier handling
+names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "ADMIN LEVEL -3 \r\n(Upazila)"] <- "ADM3_EN"
+names(hazard_exposure_dhaka)[names(hazard_exposure_dhaka) == "Flood Risk ( Riverine and Flash Flood)"] <- "flood_risk"
+
+
+flood_and_climate_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/data_simplified_with_api.csv")
+flood_and_climate_data_month <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/data_with_api_V2.csv")
+NL_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/66e5ffb23e839964db5b2042/nightlight_info.csv")
+
+
+
+
+
+
+NL_data <- transform_nl_data(NL_data)
+###### Load shapefile
+# transport_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_transport_a_free_1.shp"  # Example path
+
+waterway_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_waterways_free_1.shp"  # Example path
+
+water_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_water_a_free_1.shp"  # Example path
+
+shapefile_path_boundari_adm4 <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm4_bbs_20201113.shp"  # Example path
+shapefile_path_boundari <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm3_bbs_20201113.shp"  # Example path
+
+#### Read the shapefile
+# transport <- st_read(transport_shapefile_path)
+shapefile_boundari <- st_read(shapefile_path_boundari)
+shapefile_boundari_adm4 <- st_read(shapefile_path_boundari_adm4)
+shapefile_Dhaka_boundari <- shapefile_boundari[shapefile_boundari$ADM1_EN == "Dhaka", ]
+shapefile_Dhaka_boundari_adm4 <- shapefile_boundari_adm4[shapefile_boundari_adm4$ADM1_EN == "Dhaka", ]
+
+
 
 NL_data <- transform_and_aggregate_data(NL_data, shapefile_Dhaka_boundari_adm4)
 # Définir la zone d'intérêt (boundary)
@@ -271,6 +316,298 @@ NL_data_spatial$year <- as.numeric(NL_data_spatial$year)
 ```
 
 
+
+```{r}
+
+if (!dir.exists("reports/plots")) {
+  dir.create("reports/plots", recursive = TRUE)
+}
+
+#------------------------------------------------------------------------------#
+# 1. Monthly River Discharge Trend (2012-2022)
+#------------------------------------------------------------------------------#
+
+# Convert date_my to Date type and create a monthly average
+monthly_avg_discharge <- flood_and_climate_data_month %>%
+  mutate(date = ymd(date_my)) %>%
+  filter(date >= ymd("2010-01-01") & date <= ymd("2024-07-31")) %>%
+  group_by(date = floor_date(date, "month")) %>%
+  summarise(avg_discharge = mean(river_discharge, na.rm = TRUE))
+
+# Create the line plot
+discharge_trend_plot <- ggplot(monthly_avg_discharge, aes(x = date, y = avg_discharge)) +
+  geom_line(color = "blue", size = 0.5) +
+  geom_smooth(method = "loess", color = "red", se = FALSE, size = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Monthly Average River Discharge Trend in Dhaka (2010-2024)",
+    subtitle = "Based on CEMS GloFAS Historical Dataset",
+    x = "Date",
+    y = "Average River Discharge (m³/s)",
+    caption = "Data Source: CEMS-GloFAS historical dataset | Visualization: Bachir Sabo"
+  ) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_y_continuous(labels = scales::comma)
+
+# Save the plot
+ggsave("reports/plots/dhaka_monthly_river_discharge_trend_2010_2024.png", discharge_trend_plot, width = 15, height = 8, dpi = 300)
+
+#------------------------------------------------------------------------------#
+# 2. Yearly Mean River Discharge (Bar Plot)
+#------------------------------------------------------------------------------#
+
+# Calculate mean river discharge per year
+yearly_discharge_mean <- flood_and_climate_data_month %>%
+  group_by(year) %>%
+  summarise(mean_discharge = mean(river_discharge, na.rm = TRUE))
+
+# Create the bar plot
+discharge_mean_plot <- ggplot(yearly_discharge_mean, aes(x = factor(year), y = mean_discharge)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "Mean River Discharge per Year in Dhaka",
+    subtitle = "Average of Monthly River Discharge",
+    x = "Year",
+    y = "Mean River Discharge (m³/s)",
+    caption = "Data Source: CEMS-GloFAS historical dataset | Visualization: Bachir Sabo"
+  ) +
+  scale_y_continuous(labels = scales::comma)
+
+# Save the plot
+ggsave("reports/plots/dhaka_mean_river_discharge_per_year.png", discharge_mean_plot, width = 12, height = 8, dpi = 300)
+
+#------------------------------------------------------------------------------#
+# 3. Normalized Trends: River Discharge, Precipitation, and Night Light Intensity
+#------------------------------------------------------------------------------#
+
+# Calculate yearly averages and normalize
+yearly_avg_data <- flood_and_climate_data %>%
+  filter(year >= 2010 & year <= 2024) %>%
+  group_by(year) %>%
+  summarise(
+    avg_discharge = mean(river_discharge, na.rm = TRUE),
+    avg_precipitation = mean(precipitation_sum, na.rm = TRUE)
+  ) %>%
+  mutate(
+    norm_discharge = normalize(avg_discharge),
+    norm_precipitation = normalize(avg_precipitation)
+  )
+
+# Calculate yearly averages for night light data and normalize
+yearly_avg_nightlight <- NL_data %>%
+  filter(year >= 2010 & year <= 2024) %>%
+  group_by(year) %>%
+  summarise(avg_nightlight = mean(VIIRS_NTL, na.rm = TRUE)) %>%
+  mutate(norm_nightlight = normalize(avg_nightlight))
+
+# Merge the two datasets
+yearly_avg_data <- left_join(yearly_avg_data, yearly_avg_nightlight, by = "year")
+
+# Create the plot with normalized data
+normalized_trend_plot <- ggplot(yearly_avg_data, aes(x = year)) +
+  geom_line(aes(y = norm_discharge, color = "River Discharge"), size = 1) +
+  geom_point(aes(y = norm_discharge, color = "River Discharge"), size = 3) +
+  geom_line(aes(y = norm_precipitation, color = "Precipitation"), size = 1) +
+  geom_point(aes(y = norm_precipitation, color = "Precipitation"), size = 3) +
+  geom_line(aes(y = norm_nightlight, color = "Night Light"), size = 1) +
+  geom_point(aes(y = norm_nightlight, color = "Night Light"), size = 3) +
+  scale_y_continuous(
+    name = "Normalized Value",
+    labels = scales::number_format(accuracy = 0.01),
+    limits = c(0, 1)
+  ) +
+  scale_x_continuous(breaks = 2010:2024) +
+  scale_color_manual(values = c("River Discharge" = "blue", "Precipitation" = "darkgreen", "Night Light" = "orange")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
+  labs(
+    title = "Normalized Trends in Dhaka (2010-2024)",
+    subtitle = "River Discharge, Precipitation, and Night Light Intensity",
+    x = "Year",
+    y = "Normalized Value (0-1 scale)",
+    caption = "Data Sources: CEMS-GloFAS historical dataset & VIIRS Nighttime Lights | Visualization: Bachir Sabo"
+  )
+
+# Save the plot
+ggsave("reports/plots/dhaka_normalized_trends_2010_2024.png", normalized_trend_plot, width = 15, height = 10, dpi = 300)
+
+#------------------------------------------------------------------------------#
+# 4. Flood Extent Comparison (2014 vs 2016)
+#------------------------------------------------------------------------------#
+
+# Create the plot
+flood_comparison_plot <- ggplot() +
+  geom_sf(data = shapefile_Dhaka_boundari, fill = NA, color = "black", size = 0.5) +
+  geom_sf(data = combined_flood_data, aes(fill = WATERTYPE), color = NA, alpha = 0.7) +
+  scale_fill_manual(values = c("Flooded" = "blue", "Non-flooded" = "lightgreen"),
+                    name = "Water Type") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    legend.position = "bottom",
+    legend.key.size = unit(1, "cm"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14, face = "bold"),
+    strip.text = element_text(size = 14, face = "bold")
+  ) +
+  labs(
+    title = "Flood Extent in Dhaka",
+    subtitle = "Comparison between 2014 and 2016",
+    caption = "Data Source: World Bank (EO4SD Dhaka Flood) | Visualization: Bachir Sabo"
+  ) +
+  facet_wrap(~year, ncol = 2) +
+  coord_sf()
+
+# Save the plot
+ggsave("reports/plots/dhaka_flood_comparison_2014_2016.png", flood_comparison_plot, width = 15, height = 10, dpi = 300)
+
+#------------------------------------------------------------------------------#
+# 5. Night Light Intensity Map (for a specific year, e.g., 2022)
+#------------------------------------------------------------------------------#
+
+# Filter data for 2022
+NL_data_2022 <- NL_data %>% filter(year == 2022)
+
+# Create the plot
+nightlight_map <- ggplot() +
+  geom_sf(data = shapefile_Dhaka_boundari, fill = NA, color = "black", size = 0.5) +
+  geom_sf(data = NL_data_2022, aes(fill = VIIRS_NTL), color = NA) +
+  scale_fill_viridis_c(option = "inferno", name = "Night Light Intensity",
+                       guide = guide_colorbar(title.position = "top", 
+                                              title.hjust = 0.5,
+                                              barwidth = 10, 
+                                              barheight = 0.5)) +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    legend.position = "right",
+    legend.key.size = unit(1, "cm"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14, face = "bold")
+  ) +
+  labs(
+    title = "Night Light Intensity in Dhaka (2022)",
+    caption = "Data Source: VIIRS Nighttime Lights | Visualization: Bachir Sabo"
+  ) +
+  coord_sf()
+
+# Save the plot
+ggsave("reports/plots/dhaka_nightlight_intensity_2022.png", nightlight_map, width = 12, height = 10, dpi = 300)
+
+
+
+
+# Create a data frame for flood events with image paths
+flood_events <- data.frame(
+  year = c(2015, 2017, 2019, 2020, 2022, 2024),
+  category = factor(c(1, 3, 2, 2, 1, 3)),
+  image = c(
+    "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/flood_category_1.png",
+    "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/flood_category_3.png",
+    "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/flood_category_2.png",
+    "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/flood_category_2.png",
+    "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/flood_category_1.png",
+    "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/flood_category_3.png"
+  )
+)
+
+#------------------------------------------------------------------------------#
+# 6. Create the plot with normalized data and flood event + icones for flood categories
+#------------------------------------------------------------------------------#
+
+# Create the plot with normalized data and flood event images
+normalized_trend_plot <- ggplot(yearly_avg_data, aes(x = year)) +
+  geom_line(aes(y = norm_discharge, color = "River Discharge"), size = 1) +
+  geom_point(aes(y = norm_discharge, color = "River Discharge"), size = 3) +
+  geom_line(aes(y = norm_precipitation, color = "Precipitation"), size = 1) +
+  geom_point(aes(y = norm_precipitation, color = "Precipitation"), size = 3) +
+  geom_line(aes(y = norm_nightlight, color = "Night Light"), size = 1) +
+  geom_point(aes(y = norm_nightlight, color = "Night Light"), size = 3) +
+  geom_image(data = flood_events, aes(x = year, y = 1.05, image = image, group = category), size = 0.05, asp = 1.5) +
+  scale_y_continuous(
+    name = "Normalized Value",
+    labels = scales::number_format(accuracy = 0.01),
+    limits = c(0, 1.1)
+  ) +
+  scale_x_continuous(breaks = 2010:2024) +
+  scale_color_manual(values = c("River Discharge" = "blue", "Precipitation" = "darkgreen", "Night Light" = "orange")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.margin = margin(t = 10, b = 10)
+  ) +
+  labs(
+    title = "Normalized Trends in Dhaka (2010-2024) with Flood Events",
+    subtitle = "River Discharge, Precipitation, Night Light Intensity, and Flood Occurrences",
+    x = "Year",
+    y = "Normalized Value (0-1 scale)",
+    caption = "Data Sources: CEMS-GloFAS historical dataset & VIIRS Nighttime Lights | Visualization: Bachir Sabo"
+  ) +
+  guides(
+    color = guide_legend(order = 1, title = "Trends"),
+    group = guide_legend(order = 2, title = "Flood Category",
+                         override.aes = list(
+                           shape = 21,
+                           fill = c("yellow", "orange", "red"),
+                           color = "black",
+                           size = 5
+                         ))
+  )
+
+# Create a separate legend for flood categories with images
+flood_legend <- ggplot(flood_events, aes(x = 1, y = 1, image = image)) +
+  geom_image(size = 0.2) +
+  facet_wrap(~category, ncol = 3, labeller = labeller(category = c("1" = "Category 1", "2" = "Category 2", "3" = "Category 3"))) +
+  theme_void() +
+  theme(strip.text = element_text(size = 10))
+
+# Combine the main plot and the flood legend
+final_plot <- grid.arrange(normalized_trend_plot, flood_legend, 
+                           ncol = 1, heights = c(0.9, 0.1))
+
+# Save the plot
+ggsave("reports/plots/dhaka_normalized_trends_with_floods_2010_2024_img_legend.png", final_plot, width = 15, height = 12, dpi = 300)
+
+```
+
 ```{r}
 #Simpler plot
 ggplot() +
@@ -328,6 +665,69 @@ ggplot() +
 ```
 
 
+
+
+
+```{r}
+flood_events$year <- as.integer(flood_events$year)
+
+yearly_avg_data_filtered <- yearly_avg_data %>%
+  filter(!is.na(norm_nightlight))
+
+# Load the flood icon
+normalized_trends_flood_events_plot <- ggplot() +
+  geom_line(data = yearly_avg_data, aes(x = year, y = norm_discharge, color = "River Discharge"), size = 1.2) +
+  geom_point(data = yearly_avg_data, aes(x = year, y = norm_discharge, color = "River Discharge"), size = 4) +
+  geom_line(data = yearly_avg_data, aes(x = year, y = norm_precipitation, color = "Precipitation"), size = 1.2) +
+  geom_point(data = yearly_avg_data, aes(x = year, y = norm_precipitation, color = "Precipitation"), size = 4) +
+  geom_line(data = yearly_avg_data_filtered, aes(x = year, y = norm_nightlight, color = "Night Light"), size = 1.2) +
+  geom_point(data = yearly_avg_data_filtered, aes(x = year, y = norm_nightlight, color = "Night Light"), size = 4) +
+  scale_y_continuous(
+    name = "Normalized Value",
+    labels = scales::number_format(accuracy = 0.01),
+    limits = c(0, 1.1)
+  ) +
+  scale_x_continuous(breaks = 2010:2024) +
+  scale_color_manual(values = c("River Discharge" = "blue", "Precipitation" = "darkgreen", "Night Light" = "orange")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 24, face = "bold"),
+    plot.subtitle = element_text(size = 20, face = "italic"),
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 16),
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 16),
+    legend.key.size = unit(1.5, "cm"),
+    plot.caption = element_text(size = 14, hjust = 1, margin = margin(t = 20))
+  ) +
+  labs(
+    title = "Normalized Trends in Dhaka (2010-2024)",
+    subtitle = "River Discharge, Precipitation, Night Light Intensity",
+    x = "Year",
+    y = "Normalized Value (0-1 scale)",
+    caption = "Data Sources: CEMS-GloFAS historical dataset & VIIRS Nighttime Lights | Visualization: Bachir Sabo"
+  )
+
+# Add animation-specific layers
+normalized_trends_flood_events_plot <- normalized_trends_flood_events_plot +
+  transition_reveal(year) +
+  ease_aes('linear') +
+  enter_fade() +
+  exit_fade()
+
+# Define the path for saving the animation
+normalized_trends_flood_events_output <- "reports/plots/dhaka_normalized_trends_2010_2024.gif"
+
+# Render and save the animation
+animate(normalized_trends_flood_events_plot, 
+        nframes = 150, 
+        fps = 10, 
+        width = 1000, 
+        height = 800, 
+        renderer = gifski_renderer(normalized_trends_flood_events_output))
+
+```
 
 ```{r}
 
@@ -458,14 +858,12 @@ animate(
 # Define a custom theme for all maps
 map_theme <- theme_minimal() +
   theme(
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 10, hjust = 0.5),
-    legend.position = "bottom",
-    legend.key.size = unit(0.5, "cm"),
-    legend.text = element_text(size = 8),
-    legend.title = element_text(size = 10),
-    panel.grid.major = element_line(color = "gray90", size = 0.1),
-    panel.grid.minor = element_blank()
+    plot.title = element_text(size = 20, face = "bold"),
+    legend.key.size = unit(1.2, "cm"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.spacing.y = unit(0.5, "cm"),
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10)
   )
 
 # Map 1: Flood risk map
@@ -532,52 +930,106 @@ map2 <- ggplot() +
 
 
 # First, ensure we have the log transformation function
-log_scale <- function(x) {
-  scaled <- (log(x + 1) - log(min(x) + 1)) / (log(max(x) + 1) - log(min(x) + 1))
-  scaled * (max(x) - min(x)) + min(x)
-}
+
 
 # Apply the log transformation to the VIIRS_NTL data
 NL_data_spatial$VIIRS_NTL_log <- log_scale(NL_data_spatial$VIIRS_NTL)
 NL_data_spatial$VIIRS_NTL_cbrt <- sign(NL_data_spatial$VIIRS_NTL) * abs(NL_data_spatial$VIIRS_NTL)^(1/3)
 
-# Create the animation using the log-transformed data
-simple_animation <- ggplot(NL_data_spatial) +
-  geom_sf(aes(fill = VIIRS_NTL_cbrt), color = NA) +
-  scale_fill_gradient(low = "black", high = "yellow", 
-                      name = "VIIRS Nighttime Lights (Radiance Cube Root Transformed )",
-                      guide = guide_colorbar(title.position = "top", 
-                                             title.hjust = 0.5,
-                                             barwidth = 10, 
-                                             barheight = 0.5)) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 12, hjust = 0.5),
-    legend.key.size = unit(0.8, "cm"),
-    legend.text = element_text(size = 8),
-    legend.title = element_text(size = 10, face = "bold"),
-    legend.position = "bottom",
-    panel.grid = element_blank(),
-    axis.text = element_blank(),
-    axis.title = element_blank()
+
+
+#     scale_fill_gradient(low = "black", high = "yellow", 
+#                         name = "VIIRS Nighttime Lights",
+#                         guide = guide_colorbar(title.position = "top", 
+#                                                title.hjust = 0.5,
+#                                                barwidth = 10, 
+#                                                barheight = 0.5)) +
+
+
+nightlight_animation <- ggplot() +
+  geom_sf(data = NL_data_spatial, aes(fill = VIIRS_NTL_log), color = NA) +
+  scale_fill_gradientn(
+    colors = c("black", "yellow"),  # Corrected this line
+    name = "Night Light Intensity\n(Scaled Log Transformed)",
+    guide = guide_colorbar(title.position = "top", 
+                           title.hjust = 0.5,
+                           barwidth = 10, 
+                           barheight = 0.5)
   ) +
-  labs(title = "Night Light Intensity in Dhaka",
-       subtitle = "Year: {as.integer(frame_time)}") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  map_theme +
+  labs(title = "Night Light Intensity in Dhaka: {as.integer(frame_time)}",
+       caption = "Source: VIIRS Nighttime Light Data | Visualization: Bachir Sabo") +
+  coord_sf(datum = NA) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    legend.key.size = unit(1.2, "cm"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.spacing.y = unit(0.5, "cm"),
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10),
+    plot.caption = element_text(size = 10, hjust = 1, margin = margin(t = 10))
+  ) +
   transition_time(year) +
   ease_aes('linear')
-
 # Render the animation
-anim <- animate(simple_animation, 
+anim <- animate(nightlight_animation, 
                 nframes = 120,  # 10 frames per year
                 fps = 10, 
                 width = 800, 
                 height = 600,
-                renderer = gifski_renderer("simple_night_light_animation.gif"))
+                renderer = gifski_renderer("simple_night_light_animation_2.gif"))
 
 
 
+# Modified code for the animated Night Light Intensity map
+nightlight_animation <- ggplot() +
+  geom_sf(data = NL_data_spatial, aes(fill = VIIRS_NTL_log), color = NA) +
+  # Use a better color palette for Night Light Intensity
+  scale_fill_viridis_c(
+    option = "magma",
+    name = "Night Light Intensity\n(Log Scaled)",
+    guide = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth = unit(10, "cm"),
+      barheight = unit(0.5, "cm")
+    )
+  ) +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(
+    location = "tr", which_north = "true",
+    pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+    style = north_arrow_fancy_orienteering
+  ) +
+  map_theme +
+  labs(
+    title = "Night Light Intensity in Dhaka: {as.integer(frame_time)}",
+    subtitle = "Night Light Intensity as a Proxy for Economic Activity",
+    caption = "Source: VIIRS Nighttime Light Data | Visualization: Your Name"
+  ) +
+  coord_sf(
+    xlim = c(map_extent$xmin, map_extent$xmax),
+    ylim = c(map_extent$ymin, map_extent$ymax),
+    datum = NA
+  ) +
+  transition_time(year) +
+  ease_aes('linear') +
+  view_static()  # Keeps the view static throughout the animation
 
+# Render the animation
+anim <- animate(
+  nightlight_animation,
+  nframes = length(unique(NL_data_spatial$year)) * 10,  # 10 frames per year
+  fps = 10,
+  width = 800,
+  height = 600,
+  renderer = gifski_renderer("night_light_animation_improved.gif")
+)
 
 
 
@@ -605,7 +1057,7 @@ map2_animation <- ggplot() +
                         barwidth = 10,
                         barheight = 0.5
                       )) +
-  annotation_scale(location = "bl", width_hint = 0.3, color = "black") +
+  annotation_scale(location = "bl", width_hint = 0.3) +
   annotation_north_arrow(location = "tr", which_north = "true", 
                          pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
                          style = north_arrow_fancy_orienteering(fill = "black", line_col = "black")) +
@@ -688,6 +1140,45 @@ map3_animation <- ggplot() +
 precipitation_animation <- animate(map3_animation, nframes = 200, fps = 10, width = 800, height = 600,
                                    renderer = gifski_renderer("precipitation_animation.gif"))
 
+river_discharge_animation <- ggplot() +
+  geom_sf(data = climate_spatial_data, aes(fill = river_discharge), color = NA) +
+  scale_fill_gradientn(
+    colors = c("#E5F2FF", "#B3D9FF", "#80C1FF", "#4DA9FF", "#1A91FF", "#0066CC", "#004C99", "#003366"),
+    name = "River Discharge (m³/s)",
+    guide = guide_colorbar(title.position = "top", 
+                           title.hjust = 0.5,
+                           barwidth = 10, 
+                           barheight = 0.5)
+  ) +
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tr", which_north = "true", 
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  map_theme +
+  labs(title = "River Discharge in Dhaka: {as.integer(frame_time)}",
+       subtitle = "Annual Average River Discharge",
+       caption = "Source: CEMS GloFAS Historical Dataset | Visualization: Bachir Sabo") +
+  coord_sf(datum = NA) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    legend.key.size = unit(1.2, "cm"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.spacing.y = unit(0.5, "cm"),
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10),
+    plot.caption = element_text(size = 10, hjust = 1, margin = margin(t = 10))
+  ) +
+  transition_time(year) +
+  ease_aes('linear')
+
+# Render the animation
+river_discharge_anim <- animate(river_discharge_animation, 
+                                nframes = 200, 
+                                fps = 10, 
+                                width = 800, 
+                                height = 600,
+                                renderer = gifski_renderer("river_discharge_animation.gif"))
 
 # Map 4: Water bodies and waterways
 map4 <- ggplot() +
@@ -809,6 +1300,21 @@ combined_plot
 # print(map_log_scale)
 
 ```
+
+
+
+
+```{r}
+
+
+```
+
+
+
+```{r}
+
+```
+
 
 
 

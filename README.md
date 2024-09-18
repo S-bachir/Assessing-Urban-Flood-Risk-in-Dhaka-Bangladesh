@@ -36,9 +36,13 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
   - Source: [INFORM Sub-national Risk Index for Bangladesh 2022](https://drmkc.jrc.ec.europa.eu/inform-index/INFORM-Subnational-Risk/Bangladesh)
   - Description: Risk data (flood, earthquake, storms...) at the Upazila level in Bangladesh.
 
+- **VIIRS Nighttime Lights Data**:
+  - Source: [VIIRS Nighttime Lights](https://geo.aiddata.org/#!/)
+  - Description: Nighttime lights data for Dhaka.
+
 - **API Data Sources**:
-  - [Open-Meteo API: Temperature, humidity, and rainfall data](https://open-meteo.com/en/docs#latitude=23.7104&longitude=90.4074)
-  - [Flood API: River discharge data](https://open-meteo.com/en/docs/flood-api)
+  - [Open-Meteo API: Temperature, humidity, and rainfall data](https://open-meteo.com/en/docs#latitude=23.7104&longitude=90.4074) European Centre for Medium-Range Weather Forecasts (ECMWF)
+  - [Flood API: River discharge data](https://open-meteo.com/en/docs/flood-api) CEMS-GloFAS historical dataset
   - [Climate API: Shortwave radiation, pressure, soil moisture, and evapotranspiration data](https://open-meteo.com/en/docs/climate-api)
 
   - [World Bank Open Data API: GDP data](https://data.worldbank.org/indicator/NY.GDP.MKTP.CD)

@@ -1,0 +1,199 @@
+
+
+```{r}
+library(sf)
+library(dplyr)
+library(spdep)
+library(mgcv)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+library(tmap)
+```
+
+```{r}
+
+transform_nl_data <- function(NL_data) {
+  # Select relevant columns
+  relevant_cols <- c(
+    grep("^viirs_ntl_annual_v\\d+_avg_masked\\.\\d{4}\\.mean$", names(NL_data), value = TRUE),
+    "Level", "gqid", "id", "shapeGroup", "shapeID", "shapeName", "shapeType"
+  )
+  
+  # Subset the dataframe
+  df <- NL_data[, relevant_cols]
+  
+  # Reshape the dataframe
+  df_long <- df %>%
+    pivot_longer(
+      cols = starts_with("viirs"),
+      names_to = "year",
+      values_to = "VIIRS_NTL"
+    ) %>%
+    # Extract year from the column name
+    mutate(year = as.integer(sub(".*\\.(\\d{4})\\.mean$", "\\1", year))) %>%
+    # Rename Level to level for consistency
+    rename(level = Level)
+  
+  # Reorder columns
+  df_long <- df_long %>%
+    select(VIIRS_NTL, year, level, gqid, id, shapeGroup, shapeID, shapeName, shapeType)
+  
+  return(df_long)
+}
+
+transform_and_aggregate_data <- function(input_df, shapefile_boundari) {
+  # Vérifier si le dataframe d'entrée a les colonnes nécessaires
+  if (!all(c("shapeName", "VIIRS_NTL", "year") %in% names(input_df))) {
+    stop("Le dataframe d'entrée doit avoir les colonnes 'shapeName', 'VIIRS_NTL' et 'year'")
+  }
+  
+  # Vérifier si shapefile_boundari a les colonnes nécessaires
+  if (!all(c("ADM4_EN", "ADM3_EN") %in% names(shapefile_boundari))) {
+    stop("shapefile_boundari doit avoir les colonnes 'ADM4_EN' et 'ADM3_EN'")
+  }
+  
+  # Joindre les dataframes
+  result_df <- input_df %>%
+    left_join(shapefile_boundari %>% select(ADM4_EN, ADM3_EN), 
+              by = c("shapeName" = "ADM4_EN"))
+  
+  # Grouper par ADM3_EN et year, puis calculer la moyenne de VIIRS_NTL
+  aggregated_df <- result_df %>%
+    group_by(ADM3_EN, year) %>%
+    summarise(VIIRS_NTL = mean(VIIRS_NTL, na.rm = TRUE)) %>%
+    ungroup()
+  
+  return(aggregated_df)
+}
+```
+
+```{r}
+
+
+
+
+#######Load csv & xlsx
+
+
+
+
+flood_and_climate_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/data_simplified_with_api.csv")
+NL_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/66e5ffb23e839964db5b2042/nightlight_info.csv")
+
+NL_data <- transform_nl_data(NL_data)
+###### Load shapefile
+# transport_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_transport_a_free_1.shp"  # Example path
+
+waterway_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_waterways_free_1.shp"  # Example path
+
+water_shapefile_path <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bangladesh-latest-free.shp/gis_osm_water_a_free_1.shp"  # Example path
+
+shapefile_path_boundari_adm4 <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm4_bbs_20201113.shp"  # Example path
+shapefile_path_boundari <- "C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/bgd_adm_bbs_20201113_SHP/bgd_admbnda_adm3_bbs_20201113.shp"  # Example path
+
+#### Read the shapefile
+# transport <- st_read(transport_shapefile_path)
+shapefile_boundari <- st_read(shapefile_path_boundari)
+shapefile_boundari_adm4 <- st_read(shapefile_path_boundari_adm4)
+shapefile_Dhaka_boundari <- shapefile_boundari[shapefile_boundari$ADM1_EN == "Dhaka", ]
+shapefile_Dhaka_boundari_adm4 <- shapefile_boundari_adm4[shapefile_boundari_adm4$ADM1_EN == "Dhaka", ]
+
+
+
+NL_data <- transform_and_aggregate_data(NL_data, shapefile_Dhaka_boundari_adm4)
+
+water_Dhaka <- st_read("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/water_in_dhaka.shp")
+water_way_Dhaka <- st_read("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/water_way_in_dhaka.shp")
+
+shapefile_Dhaka_hazard_exposure <- left_join(shapefile_Dhaka_boundari, hazard_exposure_dhaka, by = "ADM3_EN")
+
+# Merge datasets
+climate_spatial_data <- shapefile_Dhaka_boundari %>%
+  left_join(flood_and_climate_data, by = "ADM3_EN")
+
+# Convert 'year' to numeric if it's not already
+climate_spatial_data$year <- as.numeric(climate_spatial_data$year)
+
+# Merge shafile with NL data
+NL_data_spatial <- shapefile_Dhaka_boundari %>%
+  left_join(NL_data, by = "ADM3_EN")  
+
+NL_data_spatial$year <- as.numeric(NL_data_spatial$year)
+
+```
+
+
+```{r}
+
+# Prepare climate data
+climate_data <- climate_spatial_data %>%
+  select(ADM3_EN, year, river_discharge, precipitation_sum) %>%
+  st_drop_geometry()
+
+# Prepare night light data
+nl_data <- NL_data_spatial %>%
+  select(ADM3_EN, year, VIIRS_NTL) %>%
+  st_drop_geometry()
+
+# Merge datasets
+combined_data <- climate_data %>%
+  left_join(nl_data, by = c("ADM3_EN", "year"))
+
+# Remove any rows with missing values
+combined_data <- combined_data %>%
+  drop_na()
+
+# Convert ADM3_EN to factor
+combined_data$ADM3_EN <- as.factor(combined_data$ADM3_EN)
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+```{r}
+# Your R code here
+
+```
+
+
+
+```{r}
+# Night Light Intensity map whith different VIIRS transformations
+
+
+```
+
+
+
+
+```{r}
+
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+
+```{r}
+# Animated plot
+
+
+```
