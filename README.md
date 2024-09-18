@@ -66,8 +66,9 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
 
 ## Project Structure
 - `data/`: Contains raw, processed, and external data.
-- `notebooks/`: Jupyter notebooks for data analysis, modeling, and visualization.
+- `notebooks/`: Jupyter notebooks & RMarkdown files for data analysis, modeling, and visualization.
 - `src/`: Source code for data loading, cleaning, modeling, visualization, and policy support.
+- `reports/`: Reports and presentations.
 - `requirements.txt`: Python dependencies.
 - `README.md`: Project documentation.
 
@@ -75,11 +76,11 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
 1. Install R and RStudio.
 2. Install the required R packages:
     ```R
-    install.packages(c("sf", "ggplot2", "dplyr", "ggthemes", "readxl", "ggspatial", "ggtext", "gganimate"))
+    install.packages(c("sf", "ggplot2", "dplyr", "ggthemes", "readxl", "ggspatial", "ggtext", "gganimate", "data.table", "ggcorrplot", "ggimage", "ggnewscale", "grid", "gridExtra", "lubridate", "magick", "patchwork", "png", "rmapshaper", "scales", "tidyr", "viridis", "spdep", "mgcv", "tmap", "spatialreg", "car"))
     ```
 3. Install Python and the required Python libraries:
     ```bash
-    pip install pandas numpy geopandas rasterio gdal requests requests_cache retry_requests openmeteo_requests matplotlib seaborn
+    pip install -r requirements.txt
     ```
 
 ## Usage
