@@ -43,8 +43,7 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
 - **API Data Sources**:
   - [Open-Meteo API: Temperature, humidity, and rainfall data](https://open-meteo.com/en/docs#latitude=23.7104&longitude=90.4074) European Centre for Medium-Range Weather Forecasts (ECMWF)
   - [Flood API: River discharge data](https://open-meteo.com/en/docs/flood-api) CEMS-GloFAS historical dataset
-  - [Climate API: Shortwave radiation, pressure, soil moisture, and evapotranspiration data](https://open-meteo.com/en/docs/climate-api)
-
+  - [Climate API: Shortwave radiation, pressure, soil moisture, and evapotranspiration data](https://open-meteo.com/en/docs/climate-api) World Data Center for Climate (WDCC), CMIP6 HighResMIP Project, EC-Earth3P-HR model, EC-Earth-Consortium
   - [World Bank Open Data API: GDP data](https://data.worldbank.org/indicator/NY.GDP.MKTP.CD)
   - [Demographic and Health Surveys (DHS) API: Detailed household and health data](https://dhsprogram.com/data/available-datasets.cfm)
   - [WorldClim: High-resolution climate data](https://www.worldclim.org/data/worldclim21.html)
@@ -94,11 +93,23 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
 
 The project includes the following key visualizations:
 
-...
+1. **City of Dhaka Flood comparaison : 2014 vs 2016**
+
+    ![City of Dhaka Flood comparaison : 2014 vs 2016](reports/plots/dhaka_flood_comparison_2014_2016.png)
+
+2. **NightTime Lights**: Visualization of VIIRS Nighttime Lights for 2023.
+
+    ![NightTime Lights](reports/plots/nightlight_log_scale.gif)
+
+3. **Dhaka Normalized Trends**: Visualization of normalized VIIRS Nighttime Lights, Precipitation, and Discharge from 2010 to 2024.
+
+    ![Dhaka Normalized Trends](reports/plots/dhaka_normalized_trends_2010_2024.gif)
 
 ## Future Work
 
-...
+- **Incorporate Upstream Data**: Include upstream precipitation and river flow data to account for transboundary water contributions.
+- **Higher Resolution Modeling**: Use finer spatial and temporal scales to capture local variations more accurately.
+
 
 ## Contributors
 

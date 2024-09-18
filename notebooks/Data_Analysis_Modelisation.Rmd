@@ -90,7 +90,7 @@ log_scale <- function(x) {
 
 
 
-flood_and_climate_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/data_simplified_with_api.csv")
+flood_and_climate_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Processed/data_simplified_with_api_vf.csv")
 NL_data <- read.csv("C:/Users/bachi/Documents/GIT_PROJECTS/Assessing-Urban-Flood-Risk-in-Dhaka-Bangladesh/data/Raw/66e5ffb23e839964db5b2042/nightlight_info.csv")
 
 NL_data <- transform_nl_data(NL_data)
@@ -140,7 +140,7 @@ NL_data_spatial$year <- as.numeric(NL_data_spatial$year)
 
 # Prepare climate data
 climate_data <- climate_spatial_data %>%
-  select(ADM3_EN, year, river_discharge, precipitation_sum) %>%
+  select(ADM3_EN, year, river_discharge, precipitation_sum, soil_moisture_0_to_10cm_mean) %>%
   st_drop_geometry()
 
 # Prepare night light data
@@ -183,20 +183,173 @@ ggplot(data_2017) +
 
 
 ```{r}
-unique(flood_and_climate_data[flood_and_climate_data$year==2020,]$river_discharge)
+
+# if (!inherits(data_2017, "sf")) {
+#   stop("data_2017 must be an sf object")
+# }
+
+# # Create new neighbors list
+# nb_2017 <- poly2nb(data_2017, queen = TRUE)
+
+# # Create new weights list
+# listw_2017 <- nb2listw(nb_2017, style = "W")
+
+# # Now perform Moran's I test
+# moran_test_2017 <- moran.test(data_2017$river_discharge, listw_2017)
+# print(moran_test_2017)
+
+
+
+
+# # Create neighbors list
+# nb <- poly2nb(shapefile_Dhaka_boundari, queen = TRUE)
+
+# # Create spatial weights list
+# listw <- nb2listw(nb, style = "W")
+
+# # Perform Moran's I test for river discharge in 2017
+# moran_test_2017 <- moran.test(data_2017$river_discharge, listw)
+# print(moran_test_2017)
+
+# data:  data_2017$river_discharge  
+# weights: listw_2017
+
+# Moran I statistic standard deviate = 3.7754, p-value = 7.988e-05
+# alternative hypothesis: greater
+# sample estimates:
+# Moran I statistic       Expectation          Variance
+#       0.185295570      -0.007874016       0.002617892
+
 ```
 
 
 ```{r}
-# Your R code here
+# Your R code here# Create neighbors list
+nb <- poly2nb(shapefile_Dhaka_boundari, queen = TRUE)
+
+# Create spatial weights list
+listw <- nb2listw(nb, style = "W")
+
+# Perform Moran's I test for river discharge in 2017
+moran_test_2017 <- moran.test(data_2017$river_discharge, listw)
+print(moran_test_2017)
 
 ```
 
 
 
 ```{r}
-# Night Light Intensity map whith different VIIRS transformations
+# Aggregate river discharge over time
 
+avg_discharge_over_time <- combined_data %>%
+  group_by(year) %>%
+  summarize(avg_discharge = mean(river_discharge, na.rm = TRUE))
+
+ggplot(avg_discharge_over_time, aes(x = year, y = avg_discharge)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Average River Discharge Over Time",
+       x = "Year",
+       y = "Average River Discharge")
+
+```
+
+
+#model Selection
+
+```{r}
+# Add coordinates (centroids)
+coords <- st_coordinates(st_centroid(combined_data_sf))
+combined_data$X <- coords[,1]
+combined_data$Y <- coords[,2]
+
+# Ensure 'year' is numeric
+combined_data$year <- as.numeric(combined_data$year)
+
+```
+
+
+#river_discharge as a function of predictors, including spatial and temporal smooths.
+
+
+```{r}
+if (!require(car)) install.packages("car")
+library(car)
+
+# Prepare the data for VIF calculation
+# We'll use the non-spatial data frame for this
+vif_data <- combined_data %>%
+  select(river_discharge, precipitation_sum, VIIRS_NTL,soil_moisture_0_to_10cm_mean, year)
+
+# If you have other relevant predictors, include them here
+
+# Fit a linear model with all predictors
+lm_model <- lm(river_discharge ~ precipitation_sum + VIIRS_NTL + soil_moisture_0_to_10cm_mean + year, data = vif_data)
+
+# Calculate VIF
+vif_results <- vif(lm_model)
+
+# Print VIF results
+print(vif_results)
+
+# You can also get a more detailed output
+vif_detailed <- data.frame(
+  Variable = names(vif_results),
+  VIF = vif_results
+)
+print(vif_detailed)
+
+
+# > print(vif_detailed)
+#                                                  Variable      VIF
+# precipitation_sum                       precipitation_sum 1.020045
+# VIIRS_NTL                                       VIIRS_NTL 1.029045
+# soil_moisture_0_to_10cm_mean soil_moisture_0_to_10cm_mean 1.069112
+# year                                                 year 1.078371
+
+```
+
+
+
+```{r}
+library(mgcv)
+
+# Fit GAM with spatial and temporal smooths
+model_gam <- gam(river_discharge ~ s(precipitation_sum) + s(VIIRS_NTL) + s(soil_moisture_0_to_10cm_mean) +
+                 te(X, Y, bs = "tp") + s(year, bs = "tp"),
+                 data = combined_data,
+                 method = "REML")
+
+# Summary of the model
+summary(model_gam)
+
+# > summary(model_gam)
+
+# Family: gaussian
+# Link function: identity
+
+# Formula:
+# river_discharge ~ s(precipitation_sum) + s(VIIRS_NTL) + s(soil_moisture_0_to_10cm_mean) + 
+#     te(X, Y, bs = "tp") + s(year, bs = "tp")
+
+# Parametric coefficients:
+#             Estimate Std. Error t value Pr(>|t|)
+# (Intercept)   1503.5      144.5    10.4   <2e-16 ***
+# ---
+# Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+# Approximate significance of smooth terms:
+#                                    edf Ref.df      F p-value
+# s(precipitation_sum)             1.025  1.048  0.686 0.41805
+# s(VIIRS_NTL)                     3.523  4.436  4.164 0.00195 **
+# s(soil_moisture_0_to_10cm_mean)  3.003  3.784 10.825 < 2e-16 ***
+# te(X,Y)                         19.420 20.977 23.763 < 2e-16 ***
+# s(year)                          3.529  4.364  3.209 0.00962 **
+# ---
+# Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+# R-sq.(adj) =  0.278   Deviance explained = 29.3%
+# -REML =  15561  Scale est. = 3.2322e+07  n = 1548
 
 ```
 
@@ -204,21 +357,166 @@ unique(flood_and_climate_data[flood_and_climate_data$year==2020,]$river_discharg
 
 
 ```{r}
+# Extract residuals
+combined_data$residuals_gam <- residuals(model_gam)
 
+# Add residuals to spatial data
+combined_data_sf$residuals_gam <- combined_data$residuals_gam
+
+# Moran's I test on residuals for 2017
+data_2017 <- combined_data_sf %>%
+  filter(year == 2017)
+
+moran_test_resid_2017 <- moran.test(data_2017$residuals_gam, listw)
+print(moran_test_resid_2017)
+
+# > print(moran_test_resid_2017)
+
+#         Moran I test under randomisation
+
+# data:  data_2017$residuals_gam
+# weights: listw
+
+# Moran I statistic standard deviate = -0.92102, p-value = 0.8215
+# alternative hypothesis: greater
+# sample estimates:
+# Moran I statistic       Expectation          Variance
+#      -0.056331409      -0.007812500       0.002775159
+
+```
+
+
+```{r}
+
+# Check R-squared
+cat("Adjusted R-squared:", summary(model_gam)$r.sq, "\n")
+
+# Plot observed vs. predicted river discharge
+combined_data$predicted_discharge <- predict(model_gam, newdata = combined_data)
+
+ggplot(combined_data, aes(x = river_discharge, y = predicted_discharge)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = 'red') +
+  theme_minimal() +
+  labs(title = "Observed vs. Predicted River Discharge",
+       x = "Observed River Discharge",
+       y = "Predicted River Discharge")
+```
+
+
+#Step 5: Model Evaluation
+#5.1. Assess Model Fit
+
+```{r}
+# Histogram of residuals
+ggplot(combined_data, aes(x = residuals_gam)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  theme_minimal() +
+  labs(title = "Histogram of Residuals",
+       x = "Residuals",
+       y = "Frequency")
+```
+
+
+```{r}
+
+
+# Predict river discharge using the model
+combined_data$predicted_discharge <- predict(model_gam, newdata = combined_data)
+
+# Merge predictions with spatial data
+combined_data_sf$predicted_discharge <- combined_data$predicted_discharge
+
+# Map predicted river discharge for 2017
+data_2017 <- combined_data_sf %>%
+  filter(year == 2017)
+ggplot(data_2017) +
+  geom_sf(aes(fill = predicted_discharge), color = NA) +
+  scale_fill_viridis_c(name = "Predicted River Discharge") +
+  theme_minimal() +
+  labs(title = "Predicted River Discharge in 2017")
 
 ```
 
 
 
+#TO GO FURTHER : Add water bodies shapefile for the model 
+
 ```{r}
+
+# Assuming 'water_Dhaka' is your water bodies shapefile
+
+# Ensure CRS matches
+water_Dhaka <- st_transform(water_Dhaka, st_crs(combined_data_sf))
+
+# Calculate centroids of ADM3_EN regions
+adm_centroids <- st_centroid(combined_data_sf)
+
+# Calculate distances
+distances <- st_distance(adm_centroids, water_Dhaka)
+
+# Find minimum distance to water body for each region
+min_distances <- apply(distances, 1, min)
+
+# Add distances to data
+combined_data$distance_to_water <- as.numeric(min_distances)
 
 ```
 
 
+```{r}
+# Refit the model including distance to water
+model_gam2 <- gam(river_discharge ~ s(precipitation_sum) + s(VIIRS_NTL) +  s(soil_moisture_0_to_10cm_mean) +
+                  s(distance_to_water) + te(X, Y, bs = "tp") + s(year, bs = "tp"),
+                  data = combined_data,
+                  method = "REML")
+
+# Summary of the new model
+summary(model_gam2)
+
+
+# > # Summary of the new model
+# > summary(model_gam2)
+
+# Family: gaussian
+# Link function: identity
+
+# Formula:
+# river_discharge ~ s(precipitation_sum) + s(VIIRS_NTL) + s(soil_moisture_0_to_10cm_mean) + 
+#     s(distance_to_water) + te(X, Y, bs = "tp") + s(year, bs = "tp")
+
+# Parametric coefficients:
+#             Estimate Std. Error t value Pr(>|t|)
+# (Intercept)   1503.5      139.4   10.79   <2e-16 ***
+# ---
+# Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+# Approximate significance of smooth terms:
+#                                    edf Ref.df      F  p-value
+# s(precipitation_sum)             1.008  1.016  0.900   0.3448
+# s(VIIRS_NTL)                     2.790  3.556  2.730   0.0330 *
+# s(soil_moisture_0_to_10cm_mean)  3.338  4.195  8.821 1.01e-06 ***
+# s(distance_to_water)             5.473  6.576 17.091  < 2e-16 ***
+# te(X,Y)                         19.407 20.934 24.553  < 2e-16 ***
+# s(year)                          3.364  4.164  2.854   0.0202 *
+# ---
+# Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+# R-sq.(adj) =  0.328   Deviance explained = 34.4%
+# -REML =  15505  Scale est. = 3.0085e+07  n = 1548
+
+
+```
 
 
 ```{r}
-# Animated plot
+# library(spatialreg)
 
+# # Fit spatial lag model
+# model_slag <- lagsarlm(river_discharge ~ precipitation_sum + VIIRS_NTL + distance_to_water + year,
+#                        data = combined_data_sf, listw = listw)
+
+# # Summary of the model
+# summary(model_slag)
 
 ```
