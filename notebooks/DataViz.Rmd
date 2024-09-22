@@ -439,12 +439,14 @@ normalized_trend_plot <- ggplot(yearly_avg_data, aes(x = year)) +
   scale_color_manual(values = c("River Discharge" = "blue", "Precipitation" = "darkgreen", "Night Light" = "orange")) +
   theme_minimal() +
   theme(
-    plot.title = element_text(size = 20, face = "bold"),
-    plot.subtitle = element_text(size = 16, face = "italic"),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 12),
+    plot.title = element_text(size = 28, face = "bold"),
+    plot.subtitle = element_text(size = 24, face = "italic"),
+    axis.title = element_text(size = 20),
+    axis.text = element_text(size = 18),
     legend.position = "bottom",
-    legend.title = element_blank()
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    plot.caption = element_text(size = 18, hjust = 1, margin = margin(t = 10))
   ) +
   labs(
     title = "Normalized Trends in Dhaka (2010-2024)",
@@ -561,41 +563,66 @@ ggsave("reports/plots/dhaka_normalized_trends_with_floods_2010_2024_img_legend.p
 #MAPS plots
 
 ```{r}
+## Ensure the required data is loaded:
+# climate_spatial_data, shapefile_Dhaka_boundari, combined_flood_data, NL_data_spatial, water_Dhaka, water_way_Dhaka
+reports/plots/dhaka_water_bodies_and_waterways.png
 
+```
+
+
+```{r}
+```notebooks/DataViz.Rmd
 # Ensure the required data is loaded:
-# shapefile_Dhaka_hazard_exposure, shapefile_Dhaka_boundari,
-# combined_flood_data, NL_data_spatial, water_Dhaka, water_way_Dhaka
+# climate_spatial_data, shapefile_Dhaka_boundari, combined_flood_data, NL_data_spatial, water_Dhaka, water_way_Dhaka
+
+# Load necessary libraries
+library(ggplot2)
+library(ggspatial)
+library(dplyr)
+library(sf)
+library(viridis)
 
 #------------------------------------------------------------------------------#
 # Define a custom theme for all maps
 #------------------------------------------------------------------------------#
 map_theme <- theme_minimal() +
   theme(
-    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 16, face = "italic", hjust = 0.5),
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 20, face = "italic", hjust = 0.5),
     legend.key.size = unit(1.2, "cm"),
     legend.text = element_text(size = 12),
     legend.title = element_text(size = 14, face = "bold"),
     legend.spacing.y = unit(0.5, "cm"),
     legend.margin = margin(t = 10, r = 10, b = 10, l = 10),
-    plot.caption = element_text(size = 12, hjust = 1, margin = margin(t = 10))
+    plot.caption = element_text(size = 16, hjust = 1, margin = margin(t = 10)),
+    legend.position = "bottom"
   )
+
+# Ensure the required data is loaded:
+# climate_spatial_data, shapefile_Dhaka_boundari, combined_flood_data, NL_data_spatial, water_Dhaka, water_way_Dhaka
+
+# Filter data for the year 2022
+data_2022 <- climate_spatial_data %>% filter(year == 2022)
+
 #------------------------------------------------------------------------------#
 # 1. Flood Risk Map (2022)
 #------------------------------------------------------------------------------#
-# This map visualizes the flood risk levels in Dhaka for the year 2022 using data
-# from the INFORM Sub-national Risk Index. Areas are colored based on their flood
-# risk score, highlighting regions that are more vulnerable to flooding.
-
 flood_risk_map <- ggplot() +
   geom_sf(data = shapefile_Dhaka_hazard_exposure, aes(fill = flood_risk), color = NA) +
   scale_fill_gradientn(
     colors = c("#FFFFD9", "#FED98E", "#FE9929", "#D95F0E", "#993404"),
     breaks = c(0.0, 2.5, 5.0, 7.5),
     labels = c("0.0", "2.5", "5.0", "7.5"),
-    name = "Flood Risk"
+    name = "Flood Risk (Index)",
+    guide = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth = unit(20, "cm"),
+      barheight = unit(0.5, "cm"),
+      label.theme = element_text(size = 12, face = "bold", color = "black")
+    )
   ) +
-  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_scale(location = "bl", width_hint = 0.3, height = unit(0.5, "cm"), text_cex = 1.2) +
   annotation_north_arrow(
     location = "tr", which_north = "true",
     pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
@@ -603,60 +630,62 @@ flood_risk_map <- ggplot() +
   ) +
   map_theme +
   labs(
-    title = "1. Flood Risk Map of Dhaka (2022)",
+    title = "Flood Risk Map of Dhaka (2022)",
     caption = "Source: INFORM Sub-national Risk Index & OpenStreetMap 2022 | Visualization: Bachir Sabo"
   ) +
   coord_sf(datum = NA)
 
+ggsave("reports/plots/dhaka_flood_risk_map_2022.png", flood_risk_map, width = 15, height = 10, dpi = 300)
+
 #------------------------------------------------------------------------------#
 # 2. Night Light Intensity Map (2022)
 #------------------------------------------------------------------------------#
-# This map shows the night light intensity in Dhaka for the year 2022 using data
-# from the VIIRS Nighttime Lights. Higher values indicate brighter areas, which
-# can be correlated with urban development and economic activity.
-
 NL_data_2022 <- NL_data_spatial %>% filter(year == 2022)
-
+NL_data_2022$VIIRS_NTL_LS <- log_scale(NL_data_2022$VIIRS_NTL)
 night_light_intensity_map <- ggplot() +
-  geom_sf(data = NL_data_2022, aes(fill = VIIRS_NTL), color = NA) +
+  geom_sf(data = NL_data_2022, aes(fill = VIIRS_NTL_LS), color = NA) +
   scale_fill_viridis_c(
     option = "inferno",
-    name = "Night Light Intensity",
+    name = "Night Light Intensity (Log scaled Radiance)",
     guide = guide_colorbar(
       title.position = "top",
       title.hjust = 0.5,
-      barwidth = 10,
-      barheight = 0.5
+      barwidth = unit(20, "cm"),
+      barheight = unit(0.5, "cm"),
+      label.theme = element_text(size = 12, face = "bold", color = "black")
     )
   ) +
-  annotation_scale(location = "bl", width_hint = 0.3, color = "black") +
+  annotation_scale(location = "bl", width_hint = 0.3, height = unit(0.5, "cm"), text_cex = 1.2) +
   annotation_north_arrow(
     location = "tr", which_north = "true",
     pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
-    style = north_arrow_fancy_orienteering(fill = "black", line_col = "black")
+    style = north_arrow_fancy_orienteering
   ) +
   map_theme +
   labs(
-    title = "2. Night Light Intensity Map of Dhaka (2022)",
+    title = "Night Light Intensity Map of Dhaka (2022)",
     caption = "Source: VIIRS Nighttime Lights | Visualization: Bachir Sabo"
   ) +
   coord_sf(datum = NA)
 
+ggsave("reports/plots/dhaka_LS_night_light_intensity_map_2022.png", night_light_intensity_map, width = 15, height = 10, dpi = 300)
+
 #------------------------------------------------------------------------------#
 # 3. Flood Extent Comparison Map (2014 vs 2016)
 #------------------------------------------------------------------------------#
-# This map compares the flood extent in Dhaka between the years 2014 and 2016.
-# It highlights areas that were flooded and non-flooded during these years,
-# providing insight into how flood patterns have changed over time.
-
 flood_extent_comparison_map <- ggplot() +
   geom_sf(data = shapefile_Dhaka_boundari, fill = NA, color = "black", size = 0.5) +
   geom_sf(data = combined_flood_data, aes(fill = WATERTYPE), color = NA, alpha = 0.7) +
   scale_fill_manual(
     values = c("Flooded" = "blue", "Non-flooded" = "lightgreen"),
-    name = "Water Type"
+    name = "Water Type",
+    guide = guide_legend(
+      title.position = "top",
+      title.hjust = 0.5,
+      label.theme = element_text(size = 12, face = "bold", color = "black")
+    )
   ) +
-  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_scale(location = "bl", width_hint = 0.3, height = unit(0.5, "cm"), text_cex = 1.2) +
   annotation_north_arrow(
     location = "tr", which_north = "true",
     pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
@@ -664,20 +693,18 @@ flood_extent_comparison_map <- ggplot() +
   ) +
   map_theme +
   labs(
-    title = "3. Flood Extent Comparison in Dhaka (2014 vs 2016)",
+    title = "Flood Extent Comparison in Dhaka (2014 vs 2016)",
     subtitle = "Comparison of flooded areas between 2014 and 2016",
     caption = "Source: World Bank (EO4SD Dhaka Flood) | Visualization: Bachir Sabo"
   ) +
   facet_wrap(~year, ncol = 2) +
   coord_sf()
 
-#------------------------------------------------------------------------------#
-# 4. Water Bodies and Waterways Map
-#------------------------------------------------------------------------------#
-# This map displays the water bodies and waterways in Dhaka, including rivers,
-# canals, streams, and drains. It provides a visual representation of the
-# hydrological features that can influence flood risk in the area.
+ggsave("reports/plots/dhaka_flood_extent_comparison_2014_2016.png", flood_extent_comparison_map, width = 15, height = 10, dpi = 300)
 
+#------------------------------------------------------------------------------#
+# 4. Water Bodies and Waterways Map (2022)
+#------------------------------------------------------------------------------#
 water_bodies_and_waterways_map <- ggplot() +
   geom_sf(data = water_Dhaka, aes(fill = fclass), color = NA, alpha = 0.8) +
   scale_fill_manual(
@@ -703,7 +730,7 @@ water_bodies_and_waterways_map <- ggplot() +
     ),
     name = "Waterways"
   ) +
-  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_scale(location = "bl", width_hint = 0.3, height = unit(0.5, "cm"), text_cex = 1.2) +
   annotation_north_arrow(
     location = "tr", which_north = "true",
     pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
@@ -711,7 +738,7 @@ water_bodies_and_waterways_map <- ggplot() +
   ) +
   map_theme +
   labs(
-    title = "4. Water Bodies and Waterways in Dhaka",
+    title = "Water Bodies and Waterways in Dhaka (2022)",
     caption = "Source: OpenStreetMap | Visualization: Bachir Sabo"
   ) +
   coord_sf(datum = NA) +
@@ -720,213 +747,26 @@ water_bodies_and_waterways_map <- ggplot() +
     color = guide_legend(title.position = "top", title.hjust = 0.5)
   )
 
-#------------------------------------------------------------------------------#
-# 5. Combined Maps Layout (Optional)
-#------------------------------------------------------------------------------#
-# This combines all the previous maps into a single layout for comparison. It
-# allows for a comprehensive view of the different factors affecting flood risk
-# in Dhaka.
-
-combined_map <- (flood_risk_map + night_light_intensity_map) /
-  (flood_extent_comparison_map + water_bodies_and_waterways_map) +
-  plot_layout(guides = "collect") &
-  theme(
-    legend.position = "bottom",
-    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)
-  ) +
-  plot_annotation(
-    title = "Flood Risk Analysis in Dhaka, Bangladesh (2022)",
-    subtitle = "Examining flood vulnerability, urban development, and hydrological features",
-    caption = "Sources: INFORM Risk Index, VIIRS NTL, World Bank, OpenStreetMap | Visualization: Bachir Sabo",
-    theme = theme(
-      plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 18, hjust = 0.5),
-      plot.caption = element_text(size = 12, hjust = 1)
-    )
-  )
-
-# To display or save the combined map, uncomment the following lines:
-print(combined_map)
-ggsave("reports/plots/dhaka_combined_maps.png", combined_map, width = 20, height = 15, dpi = 300)
-
-```
-
-
-```{r}
+ggsave("reports/plots/dhaka_water_bodies_and_waterways.png", water_bodies_and_waterways_map, width = 15, height = 10, dpi = 300)
 
 #------------------------------------------------------------------------------#
-# Define variables and prepare data
+# 5. River Discharge Map (2022)
 #------------------------------------------------------------------------------#
-
-# Variables to plot
-variables_to_plot <- c("rain_sum", "precipitation_sum", "river_discharge", 
-                       "temperature_2m_mean", "soil_moisture_0_to_10cm_mean", 
-                       "pressure_msl_mean")
-
-# Reshape data to long format
-climate_long <- climate_spatial_data %>%
-  st_drop_geometry() %>%
-  select(ADM3_EN, year, all_of(variables_to_plot)) %>%
-  pivot_longer(
-    cols = all_of(variables_to_plot),
-    names_to = "variable",
-    values_to = "value"
-  ) %>%
-  left_join(select(climate_spatial_data, ADM3_EN, year, geometry), by = c("ADM3_EN", "year")) %>%
-  st_as_sf()
-
-# Ensure year is numeric
-climate_long$year <- as.numeric(as.character(climate_long$year))
-
-# Variable labels
-variable_labels <- c(
-  rain_sum = "Rain Sum (mm)",
-  precipitation_sum = "Precipitation Sum (mm)",
-  river_discharge = "River Discharge (m³/s)",
-  temperature_2m_mean = "Mean Temperature (°C)",
-  soil_moisture_0_to_10cm_mean = "Soil Moisture (0-10 cm) (m³/m³)",
-  pressure_msl_mean = "Mean Sea Level Pressure (hPa)"
-)
-
-# Define a custom theme for the plot
-climate_map_theme <- theme_minimal() +
-  theme(
-    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 16, hjust = 0.5),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    strip.text = element_text(size = 14),
-    axis.text = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.caption = element_text(size = 10, hjust = 1, margin = margin(t = 10))
-  )
-
-# Ensure the required data is loaded:
-# NL_data_spatial, climate_spatial_data
-
-#------------------------------------------------------------------------------#
-# Animated Map Plot 1: Night Light Intensity Animation
-#------------------------------------------------------------------------------#
-# Apply log transformation to Night Light data
-NL_data_spatial$VIIRS_NTL_log <- log(NL_data_spatial$VIIRS_NTL + 1)
-
-night_light_intensity_animation <- ggplot(NL_data_spatial) +
-  geom_sf(aes(fill = VIIRS_NTL_log), color = NA) +
-  scale_fill_viridis_c(
-    option = "magma",
-    name = "Night Light Intensity\n(Log Scaled)",
-    guide = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      barwidth = unit(10, "cm"),
-      barheight = unit(0.5, "cm")
-    )
-  ) +
-  annotation_scale(location = "bl", width_hint = 0.3) +
-  annotation_north_arrow(
-    location = "tr", which_north = "true",
-    pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
-    style = north_arrow_fancy_orienteering
-  ) +
-  map_theme +
-  labs(
-    title = "Night Light Intensity in Dhaka: {frame_time}",
-    subtitle = "Night Light Intensity as a Proxy for Economic Activity",
-    caption = "Source: VIIRS Nighttime Lights Data | Visualization: Bachir Sabo"
-  ) +
-  coord_sf(datum = NA) +
-  transition_time(year) +
-  ease_aes('linear')
-
-# Render and save the animation
-animate(
-  night_light_intensity_animation,
-  nframes = length(unique(NL_data_spatial$year)) * 10,
-  fps = 10,
-  width = 800,
-  height = 600,
-  renderer = gifski_renderer("reports/plots/dhaka_nightlight_animation.gif")
-)
-
-#------------------------------------------------------------------------------#
-# Animated Map Plot 2: Climate Variables Animation
-#------------------------------------------------------------------------------#
-# Variables to visualize
-variables_to_plot <- c("rain_sum", "precipitation_sum", "river_discharge", "temperature_2m_mean","soil_moisture_0_to_10cm_mean","pressure_msl_mean")
-
-# Reshape data to long format
-climate_long <- climate_spatial_data %>%
-  st_drop_geometry() %>%
-  select(ADM3_EN, year, all_of(variables_to_plot)) %>%
-  pivot_longer(
-    cols = all_of(variables_to_plot),
-    names_to = "variable",
-    values_to = "value"
-  ) %>%
-  left_join(select(climate_spatial_data, ADM3_EN, year, geometry), by = c("ADM3_EN", "year")) %>%
-  st_as_sf()
-
-# Variable labels
-variable_labels <- c(
-  rain_sum = "Rain Sum (mm)",
-  precipitation_sum = "Precipitation Sum (mm)",
-  river_discharge = "River Discharge (m³/s)",
-  temperature_2m_mean = "Mean Temperature (°C)",
-  soil_moisture_0_to_10cm_mean = "Soil Moisture (0-10 cm) (m³/(m³)",
-  pressure_msl_mean = "Mean Sea Level Pressure (hPa)"
-)
-
-climate_variables_animation <- ggplot(climate_long) +
-  geom_sf(aes(fill = value), color = NA) +
-  scale_fill_viridis_c(option = "plasma", name = "") +
-  facet_wrap(~ variable, ncol = 2, scales = "free", labeller = as_labeller(variable_labels)) +
-  labs(
-    title = "Yearly Evolution of Climate Variables in Dhaka",
-    subtitle = 'Year: {frame_time}',
-    caption = "Sources: CEMS GloFAS, Copernicus Climate Data Store | Visualization: Bachir Sabo"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 16, hjust = 0.5),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    strip.text = element_text(size = 16),
-    axis.text = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.caption = element_text(size = 12, hjust = 1, margin = margin(t = 10))
-  ) +
-  transition_time(year) +
-  ease_aes('linear')
-
-# Render and save the animation
-animate(
-  climate_variables_animation,
-  nframes = length(unique(climate_long$year)) * 10,
-  fps = 10,
-  width = 800,
-  height = 800,
-  renderer = gifski_renderer("reports/plots/dhaka_climate_animation.gif")
-)
-
-#------------------------------------------------------------------------------#
-# Animated Map Plot 3: River Discharge Animation
-#------------------------------------------------------------------------------#
-river_discharge_animation <- ggplot(climate_spatial_data) +
-  geom_sf(aes(fill = river_discharge), color = NA) +
+river_discharge_map <- ggplot() +
+  geom_sf(data = shapefile_Dhaka_boundari, fill = NA, color = "black", size = 0.5) +
+  geom_sf(data = data_2022, aes(fill = river_discharge), color = NA) +
   scale_fill_viridis_c(
     option = "plasma",
     name = "River Discharge (m³/s)",
     guide = guide_colorbar(
       title.position = "top",
       title.hjust = 0.5,
-      barwidth = unit(10, "cm"),
-      barheight = unit(0.5, "cm")
+      barwidth = unit(20, "cm"),
+      barheight = unit(0.5, "cm"),
+      label.theme = element_text(size = 12, face = "bold", color = "black")
     )
   ) +
-  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_scale(location = "bl", width_hint = 0.3, height = unit(0.5, "cm"), text_cex = 1.2) +
   annotation_north_arrow(
     location = "tr", which_north = "true",
     pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
@@ -934,22 +774,44 @@ river_discharge_animation <- ggplot(climate_spatial_data) +
   ) +
   map_theme +
   labs(
-    title = "River Discharge in Dhaka: {frame_time}",
-    caption = "Source: CEMS GloFAS Historical Dataset | Visualization: Bachir Sabo"
+    title = "River Discharge in Dhaka (2022)",
+    caption = "Source: CEMS-GloFAS historical dataset | Visualization: Bachir Sabo"
   ) +
-  coord_sf(datum = NA) +
-  transition_time(year) +
-  ease_aes('linear')
+  coord_sf(datum = NA)
 
-# Render and save the animation
-animate(
-  river_discharge_animation,
-  nframes = length(unique(climate_spatial_data$year)) * 10,
-  fps = 10,
-  width = 800,
-  height = 600,
-  renderer = gifski_renderer("reports/plots/dhaka_river_discharge_animation.gif")
-)
+ggsave("reports/plots/dhaka_river_discharge_2022.png", river_discharge_map, width = 15, height = 10, dpi = 300)
+
+#------------------------------------------------------------------------------#
+# 6. Soil Moisture Map (2022)
+#------------------------------------------------------------------------------#
+soil_moisture_map <- ggplot() +
+  geom_sf(data = shapefile_Dhaka_boundari, fill = NA, color = "black", size = 0.5) +
+  geom_sf(data = data_2022, aes(fill = soil_moisture_0_to_10cm_mean), color = NA) +
+  scale_fill_viridis_c(
+    option = "magma",
+    name = "Soil Moisture (m³/m³)",
+    guide = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth = unit(20, "cm"),
+      barheight = unit(0.5, "cm"),
+      label.theme = element_text(size = 12, face = "bold", color = "black")
+    )
+  ) +
+  annotation_scale(location = "bl", width_hint = 0.3, height = unit(0.5, "cm"), text_cex = 1.2) +
+  annotation_north_arrow(
+    location = "tr", which_north = "true",
+    pad_x = unit(0.1, "in"), pad_y = unit(0.2, "in"),
+    style = north_arrow_fancy_orienteering
+  ) +
+  map_theme +
+  labs(
+    title = "Soil Moisture in Dhaka (2022)",
+    caption = "Source: CEMS-GloFAS historical dataset | Visualization: Bachir Sabo"
+  ) +
+  coord_sf(datum = NA)
+
+ggsave("reports/plots/dhaka_soil_moisture_2022.png", soil_moisture_map, width = 15, height = 10, dpi = 300)
 
 ```
 
@@ -1015,6 +877,7 @@ ggplot() +
 
 
 ```{r}
+```notebooks/DataViz.Rmd
 flood_events$year <- as.integer(flood_events$year)
 
 yearly_avg_data_filtered <- yearly_avg_data %>%
@@ -1037,15 +900,15 @@ normalized_trends_flood_events_plot <- ggplot() +
   scale_color_manual(values = c("River Discharge" = "blue", "Precipitation" = "darkgreen", "Night Light" = "orange")) +
   theme_minimal() +
   theme(
-    plot.title = element_text(size = 24, face = "bold"),
-    plot.subtitle = element_text(size = 20, face = "italic"),
-    axis.title = element_text(size = 18, face = "bold"),
-    axis.text = element_text(size = 16),
+    plot.title = element_text(size = 28, face = "bold"),
+    plot.subtitle = element_text(size = 24, face = "italic"),
+    axis.title = element_text(size = 20),
+    axis.text = element_text(size = 18),
     legend.position = "bottom",
     legend.title = element_blank(),
-    legend.text = element_text(size = 16),
+    legend.text = element_text(size = 18),
     legend.key.size = unit(1.5, "cm"),
-    plot.caption = element_text(size = 14, hjust = 1, margin = margin(t = 20))
+    plot.caption = element_text(size = 18, hjust = 1, margin = margin(t = 10))
   ) +
   labs(
     title = "Normalized Trends in Dhaka (2010-2024)",

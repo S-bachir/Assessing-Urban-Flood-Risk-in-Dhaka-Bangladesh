@@ -96,17 +96,17 @@ Urban flooding is a significant challenge in many South Asian cities, with Dhaka
 
 The project includes the following key visualizations:
 
-1. **City of Dhaka Flood comparaison : 2014 vs 2016**
+1. **Dhaka Normalized Trends**: Visualization of normalized VIIRS Nighttime Lights, Precipitation, and Discharge from 2010 to 2024.
 
-    ![City of Dhaka Flood comparaison : 2014 vs 2016](reports/plots/dhaka_flood_comparison_2014_2016.png)
+    ![Dhaka Normalized Trends](reports/plots/dhaka_normalized_trends_2010_2024_test.gif)
 
 2. **NightTime Lights**: Visualization of VIIRS Nighttime Lights for 2023.
 
     ![NightTime Lights](reports/plots/nightlight_log_scale.png)
 
-3. **Dhaka Normalized Trends**: Visualization of normalized VIIRS Nighttime Lights, Precipitation, and Discharge from 2010 to 2024.
+3. **City of Dhaka Flood comparaison : 2014 vs 2016**
 
-    ![Dhaka Normalized Trends](reports/plots/dhaka_normalized_trends_2010_2024.gif)
+    ![City of Dhaka Flood comparaison : 2014 vs 2016](reports/plots/dhaka_flood_comparison_2014_2016.png)
 
 ## Future Work
 
